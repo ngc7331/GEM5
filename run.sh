@@ -9,6 +9,8 @@ BIN_FILE=${GEM5_HOME}/../NutShell/ready-to-run/${BIN}.bin
 
 RUN_CMD="$GEM5 $CONFIG \
     --xiangshan-system --cpu-type=DerivO3CPU \
+    --mem-type=DRAMsim3 \
+    --dramsim3-ini=${GEM5_HOME}/ext/dramsim3/xiangshan_configs/xiangshan_DDR4_8Gb_x8_3200_2ch.ini \
     --mem-size=8GB \
     --caches --cacheline_size=64 \
     --l1i_size=64kB --l1i_assoc=8 \
