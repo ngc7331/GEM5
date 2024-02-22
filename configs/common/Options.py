@@ -632,3 +632,21 @@ def addFSOptions(parser):
                         default=None, help="The path of mmc img")
     parser.add_argument("--mmc-cptbin", action="store",
                         type=str, default=None, help="The path of mmc cptbin")
+
+def addFTBTageOptions(parser):
+    def int_list(s: str) -> list:
+        return [int(_) for _ in s.split(",")]
+    parser.add_argument("--ftbtage-num-predictors", action="store", type=int,
+                        default=4, help="Number of TAGE predictors")
+
+    parser.add_argument("--ftbtage-table-sizes", action="store", type=int_list,
+                        default=[2048]*4, help="the ITTAGE T0~Tn length")
+    
+    parser.add_argument("--ftbtage-ttag-bit-sizes", action="store", type=int_list,
+                        default=[8]*4, help="the T0~Tn entry's tag bit size")
+    
+    parser.add_argument("--ftbtage-ttag-pc-shifts", action="store", type=int_list,
+                        default=[1]*4, help="when the T0~Tn entry's tag generating, PC right shift")
+    
+    parser.add_argument("--ftbtage-hist-lengths", action="store", type=int_list,
+                        default=[8, 13, 32, 119], help="the FTB TAGE T0~Tn history length")

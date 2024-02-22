@@ -263,6 +263,18 @@ def build_test_system(np):
                                                     enableJumpAheadPredictor=args.enable_jump_ahead_predictor
                                                     )
                     print("db_switches:", bp_db_switches)
+
+                    test_sys.cpu[i].branchPred.tage.numPredictors=args.ftbtage_num_predictors
+                    test_sys.cpu[i].branchPred.tage.tableSizes=args.ftbtage_table_sizes
+                    test_sys.cpu[i].branchPred.tage.TTagBitSizes=args.ftbtage_ttag_bit_sizes
+                    test_sys.cpu[i].branchPred.tage.TTagPcShifts=args.ftbtage_ttag_pc_shifts
+                    test_sys.cpu[i].branchPred.tage.histLengths=args.ftbtage_hist_lengths
+
+                    print("FTBTAGE.numPredictors:", args.ftbtage_num_predictors)
+                    print("FTBTAGE.tableSizes:", args.ftbtage_table_sizes)
+                    print("FTBTAGE.TTagBitSizes:", args.ftbtage_ttag_bit_sizes)
+                    print("FTBTAGE.TTagPcShifts:", args.ftbtage_ttag_pc_shifts)
+                    print("FTBTAGE.histLengths:", args.ftbtage_hist_lengths)
                 else:
                     if enable_bp_db:
                         print("bpdb not supported for this branch predictor")
@@ -389,6 +401,9 @@ def build_drive_system(np):
 parser = argparse.ArgumentParser()
 Options.addCommonOptions(parser)
 Options.addFSOptions(parser)
+
+# Add FTBTage specific options for BPU+DSE
+Options.addFTBTageOptions(parser)
 
 # Add the ruby specific and protocol specific args
 if '--ruby' in sys.argv:

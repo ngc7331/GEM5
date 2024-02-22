@@ -7,6 +7,20 @@ CONFIG=$GEM5_HOME/configs/example/fs.py
 BIN=${BIN:-coremark-1000}
 BIN_FILE=${GEM5_HOME}/../NutShell/ready-to-run/${BIN}.bin
 
+FTBTAGE_NUM_PREDICTORS=${FTBTAGE_NUM_PREDICTORS:-4}
+FTBTAGE_TABLE_SIZES=${FTBTAGE_TABLE_SIZES:-2048,2048,2048,2048}
+FTBTAGE_TTAG_BIT_SIZES=${FTBTAGE_TTAG_BIT_SIZES:-8,8,8,8}
+FTBTAGE_TTAG_PC_SHIFTS=${FTBTAGE_TTAG_PC_SHIFTS:-1,1,1,1}
+FTBTAGE_HIST_LENGTHS=${FTBTAGE_HIST_LENGTHS:-8,13,32,119}
+
+TAGE_ARGS=" \
+    --ftbtage-num-predictors=${FTBTAGE_NUM_PREDICTORS} \
+    --ftbtage-table-sizes=${FTBTAGE_TABLE_SIZES} \
+    --ftbtage-ttag-bit-sizes=${FTBTAGE_TTAG_BIT_SIZES} \
+    --ftbtage-ttag-pc-shifts=${FTBTAGE_TTAG_PC_SHIFTS} \
+    --ftbtage-hist-lengths=${FTBTAGE_HIST_LENGTHS} \
+"
+
 RUN_CMD="$GEM5 $CONFIG \
     --xiangshan-system --cpu-type=DerivO3CPU \
     --mem-type=DRAMsim3 \
@@ -25,6 +39,7 @@ RUN_CMD="$GEM5 $CONFIG \
     --l3-hwp-type=WorkerPrefetcher \
     --bp-type=DecoupledBPUWithFTB --enable-loop-predictor \
     --generic-rv-cpt=${BIN_FILE} --raw-cpt \
+    ${TAGE_ARGS} \
 "
 
 ./util/docker-wrapper.sh "${RUN_CMD}"
