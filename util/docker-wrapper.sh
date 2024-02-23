@@ -1,7 +1,7 @@
 #!/bin/bash
 
 CMD=$*
-IMAGE=ngc7331/gem5-ubuntu-22.04_all-dependencies-xs
+IMAGE=ngc7331/gem5-env-xs:ubuntu-22.04-latest
 
 PWD=$(pwd)
 PARENT_PWD=$(dirname ${PWD})
