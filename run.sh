@@ -5,7 +5,7 @@ GEM5=$GEM5_HOME/build/RISCV/gem5.opt
 CONFIG=$GEM5_HOME/configs/example/fs.py
 
 BIN=${BIN:-coremark-1000}
-BIN_FILE=${GEM5_HOME}/../NutShell/ready-to-run/${BIN}.bin
+BIN_FILE=${GEM5_HOME}/../ready-to-run/${BIN}.bin
 
 FTBTAGE_NUM_PREDICTORS=${FTBTAGE_NUM_PREDICTORS:-4}
 FTBTAGE_TABLE_SIZES=${FTBTAGE_TABLE_SIZES:-2048,2048,2048,2048}
