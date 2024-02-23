@@ -12,5 +12,5 @@ if [ ! -d ${PARENT_PWD}/.git ]; then
   exit 1
 fi
 
-docker run -it --rm --user ${UID}:${GID} --volume ${PARENT_PWD}:${PARENT_PWD}:rw ${IMAGE} \
+docker run -it --rm --user $(id -u):$(id -g) --volume ${PARENT_PWD}:${PARENT_PWD}:rw ${IMAGE} \
   bash -c "cd ${PWD} && ${CMD}"
