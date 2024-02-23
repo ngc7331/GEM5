@@ -39,6 +39,7 @@ RUN_CMD="$GEM5 $CONFIG \
     --l3-hwp-type=WorkerPrefetcher \
     --bp-type=DecoupledBPUWithFTB --enable-loop-predictor \
     --generic-rv-cpt=${BIN_FILE} --raw-cpt \
+    --enable-bp-db \
     ${TAGE_ARGS} \
 "
 
