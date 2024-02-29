@@ -9,6 +9,8 @@ CONFIG=$GEM5_HOME/configs/example/fs.py
 BIN=${BIN:-coremark-1000}
 BIN_FILE=${GEM5_HOME}/../ready-to-run/${BIN}.bin
 
+BP_DB_FILE=${BP_DB_FILE:-bp.db}
+
 FTBTAGE_NUM_PREDICTORS=${FTBTAGE_NUM_PREDICTORS:-4}
 FTBTAGE_TABLE_SIZES=${FTBTAGE_TABLE_SIZES:-2048,2048,2048,2048}
 FTBTAGE_TTAG_BIT_SIZES=${FTBTAGE_TTAG_BIT_SIZES:-8,8,8,8}
@@ -41,7 +43,7 @@ RUN_CMD="$GEM5 $CONFIG \
     --l3-hwp-type=WorkerPrefetcher \
     --bp-type=DecoupledBPUWithFTB --enable-loop-predictor \
     --generic-rv-cpt=${BIN_FILE} --raw-cpt \
-    --enable-bp-db \
+    --enable-bp-db --bp-db-file=${BP_DB_FILE} \
     ${TAGE_ARGS} \
 "
 
