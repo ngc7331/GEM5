@@ -1,5 +1,7 @@
 #!/bin/bash
 
+USE_DOCKER=${USE_DOCKER:-true}
+
 GEM5_HOME=$(pwd)
 GEM5=$GEM5_HOME/build/RISCV/gem5.opt
 CONFIG=$GEM5_HOME/configs/example/fs.py
@@ -43,4 +45,8 @@ RUN_CMD="$GEM5 $CONFIG \
     ${TAGE_ARGS} \
 "
 
-./util/docker-wrapper.sh "${RUN_CMD}"
+if [ "$USE_DOCKER" = "true" ]; then
+    ./util/docker-wrapper.sh "${RUN_CMD}"
+else
+    eval "${RUN_CMD}"
+fi
