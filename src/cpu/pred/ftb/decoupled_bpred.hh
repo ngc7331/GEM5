@@ -233,6 +233,7 @@ class DecoupledBPUWithFTB : public BPredUnit
 
     // bool enableDB;
     std::vector<std::string> bpDBSwitches;
+    std::string bpDBFile;
     bool someDBenabled{false};
     bool enableBranchTrace{false};
     bool enableLoopDB{false};

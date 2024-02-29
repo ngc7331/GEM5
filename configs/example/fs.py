@@ -258,11 +258,13 @@ def build_test_system(np):
                 if isinstance(test_sys.cpu[i].branchPred, bpClass):
                     test_sys.cpu[i].branchPred = bpClass(
                                                     bpDBSwitches=bp_db_switches,
+                                                    bpDBFile=args.bp_db_file,
                                                     enableLoopBuffer=args.enable_loop_buffer,
                                                     enableLoopPredictor=args.enable_loop_predictor,
                                                     enableJumpAheadPredictor=args.enable_jump_ahead_predictor
                                                     )
                     print("db_switches:", bp_db_switches)
+                    print("db_file:", args.bp_db_file)
 
                     test_sys.cpu[i].branchPred.tage.numPredictors=args.ftbtage_num_predictors
                     test_sys.cpu[i].branchPred.tage.tableSizes=args.ftbtage_table_sizes

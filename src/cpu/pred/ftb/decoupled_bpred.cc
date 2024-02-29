@@ -39,6 +39,7 @@ DecoupledBPUWithFTB::DecoupledBPUWithFTB(const DecoupledBPUWithFTBParams &p)
       uras(p.uras),
     //   enableDB(p.enableBPDB),
       bpDBSwitches(p.bpDBSwitches),
+      bpDBFile(p.bpDBFile),
       numStages(p.numStages),
       historyManager(p.numBr),
       dbpFtbStats(this, p.numStages, p.fsq_size)
@@ -429,7 +430,7 @@ DecoupledBPUWithFTB::DecoupledBPUWithFTB(const DecoupledBPUWithFTBParams &p)
         simout.close(out_handle);
 
         if (someDBenabled) {
-            bpdb.save_db("bp.db");
+            bpdb.save_db(bpDBFile.c_str());
         }
     });
 }

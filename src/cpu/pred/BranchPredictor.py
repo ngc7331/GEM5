@@ -945,6 +945,7 @@ class DecoupledBPUWithFTB(BranchPredictor):
     uras = Param.uRAS(uRAS(), "uRAS")
     
     bpDBSwitches = VectorParam.String([], "Enable which traces in the form of database")
+    bpDBFile = Param.String("bp.db", "The file name of the database")
     enableLoopBuffer = Param.Bool(False, "Enable loop buffer to supply inst for loops")
     enableLoopPredictor = Param.Bool(False, "Use loop predictor to predict loop exit")
     enableJumpAheadPredictor = Param.Bool(False, "Use jump ahead predictor to skip no-need-to-predict blocks")

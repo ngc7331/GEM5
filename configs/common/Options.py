@@ -258,6 +258,8 @@ def addCommonOptions(parser):
                         help="enable bp database for specified subdatabase, "
                         "basic branch trace is enabled by default even without specifying, "
                         "available subdatabase: basic, tage, ras, loop")
+    parser.add_argument("--bp-db-file", default="bp.db", action="store",
+                        help="Where to save bp database")
     parser.add_argument("--enable-loop-buffer", default=False, action="store_true",
                         help="enable loop buffer (only for ftb branch predictor)")
     parser.add_argument("--enable-loop-predictor", default=False, action="store_true",
