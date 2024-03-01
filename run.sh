@@ -4,6 +4,19 @@ USE_DOCKER=${USE_DOCKER:-true}
 
 GEM5_HOME=$(pwd)
 GEM5=$GEM5_HOME/build/RISCV/gem5.opt
+
+DEBUG_FLAGS=
+if [[ -n "$DEBUG_FLAGS" ]]; then
+    DEBUG_ARGS="--debug-flags=${DEBUG_FLAGS}"
+else
+    DEBUG_ARGS=
+fi
+STATS_FILE=${STATS_FILE:-stats.txt}
+GEM5_ARGS=" \
+    ${DEBUG_ARGS} \
+    --stats-file=${STATS_FILE} \
+"
+
 CONFIG=$GEM5_HOME/configs/example/fs.py
 
 BIN=${BIN:-coremark-1000}
@@ -25,7 +38,7 @@ TAGE_ARGS=" \
     --ftbtage-hist-lengths=${FTBTAGE_HIST_LENGTHS} \
 "
 
-RUN_CMD="$GEM5 $CONFIG \
+RUN_CMD="$GEM5 $GEM5_ARGS $CONFIG \
     --xiangshan-system --cpu-type=DerivO3CPU \
     --mem-type=DRAMsim3 \
     --dramsim3-ini=${GEM5_HOME}/ext/dramsim3/xiangshan_configs/xiangshan_DDR4_8Gb_x8_3200_2ch.ini \
