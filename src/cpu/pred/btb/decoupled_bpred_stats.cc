@@ -465,7 +465,23 @@ DecoupledBPUWithBTB::DBPBTBStats::DBPBTBStats(
     ADD_STAT(s3PredWrongMbtb, statistics::units::Count::get(), "S3pred wrong blame mbtb "),
     ADD_STAT(s3PredWrongTage, statistics::units::Count::get(), "S3pred wrong blame tage "),
     ADD_STAT(s3PredWrongIttage, statistics::units::Count::get(), "S3pred wrong blame ittage "),
-    ADD_STAT(s3PredWrongRas, statistics::units::Count::get(), "S3pred wrong blame ras ")
+    ADD_STAT(s3PredWrongRas, statistics::units::Count::get(), "S3pred wrong blame ras "),
+    ADD_STAT(upstreamUdpOffPathEntries, statistics::units::Count::get(),
+             "Number of transitions to assumed off-path in upstream UDP"),
+    ADD_STAT(upstreamUdpPathResets, statistics::units::Count::get(),
+             "Number of upstream UDP path confidence resets"),
+    ADD_STAT(upstreamUdpUsefulSetHits, statistics::units::Count::get(),
+             "Number of off-path candidates admitted by the useful-set"),
+    ADD_STAT(upstreamUdpSeniorityHits, statistics::units::Count::get(),
+             "Number of committed instructions matching the Seniority-FTQ"),
+    ADD_STAT(upstreamUdpSeniorityMisses, statistics::units::Count::get(),
+             "Number of committed instructions missing the Seniority-FTQ"),
+    ADD_STAT(upstreamUdpUsefulSetTrains, statistics::units::Count::get(),
+             "Number of useful candidates trained from commit"),
+    ADD_STAT(upstreamUdpAgedUnuseful, statistics::units::Count::get(),
+             "Number of issued prefetches unused for the Seniority hold window"),
+    ADD_STAT(upstreamUdpBloomClears, statistics::units::Count::get(),
+             "Number of upstream UDP Bloom filter clears")
 
 {
     predsOfEachStage.init(numStages);
@@ -914,6 +930,21 @@ DecoupledBPUWithBTB::commitPredWrongSource(const FetchTarget &entry)
 void
 DecoupledBPUWithBTB::notifyInstCommit(const DynInstPtr &inst)
 {
+    if (enableUpstreamUdp) {
+        const auto result = upstreamUdp->notifyCommit(
+            inst->pcState().instAddr(), inst->threadNumber,
+            upstreamUdpCycle());
+        if (result.seniorityHit) {
+            ++dbpBtbStats.upstreamUdpSeniorityHits;
+        } else {
+            ++dbpBtbStats.upstreamUdpSeniorityMisses;
+        }
+        if (result.trained) {
+            ++dbpBtbStats.upstreamUdpUsefulSetTrains;
+        }
+        accountUpstreamUdpEvents();
+    }
+
     // Update committed instruction count for target
     ftq.get(inst->ftqId, inst->threadNumber).commitInstNum++;
 

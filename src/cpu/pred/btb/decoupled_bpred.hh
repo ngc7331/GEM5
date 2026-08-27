@@ -4,6 +4,7 @@
 #include <array>
 #include <cstdint>
 #include <deque>
+#include <memory>
 #include <queue>
 #include <stack>
 #include <utility>
@@ -26,6 +27,7 @@
 #include "cpu/pred/btb/microtage.hh"
 #include "cpu/pred/btb/ras.hh"
 #include "cpu/pred/btb/timed_base_pred.hh"
+#include "cpu/pred/btb/upstream_udp.hh"
 #include "cpu/pred/general_arch_db.hh"
 #include "cpu/timebuf.hh"
 #include "debug/DBPBTBStats.hh"
@@ -132,6 +134,8 @@ class DecoupledBPUWithBTB : public BPredUnit
 
     bool enableUdp{false};
     int udpInitConfidence{0};
+    bool enableUpstreamUdp{false};
+    std::unique_ptr<UpstreamUDP> upstreamUdp;
 
     FetchTargetId prefetchID[MaxThreads] = {};
     Addr lastPrefetchAddr[MaxThreads] = {};
@@ -331,6 +335,15 @@ class DecoupledBPUWithBTB : public BPredUnit
         statistics::Scalar s3PredWrongIttage;
         statistics::Scalar s3PredWrongRas;
 
+        statistics::Scalar upstreamUdpOffPathEntries;
+        statistics::Scalar upstreamUdpPathResets;
+        statistics::Scalar upstreamUdpUsefulSetHits;
+        statistics::Scalar upstreamUdpSeniorityHits;
+        statistics::Scalar upstreamUdpSeniorityMisses;
+        statistics::Scalar upstreamUdpUsefulSetTrains;
+        statistics::Scalar upstreamUdpAgedUnuseful;
+        statistics::Scalar upstreamUdpBloomClears;
+
         DBPBTBStats(statistics::Group* parent, unsigned numStages, unsigned fsqSize, unsigned maxInstsNum);
     } dbpBtbStats;
 
@@ -432,12 +445,15 @@ class DecoupledBPUWithBTB : public BPredUnit
     const FetchTarget &ftqFetchingTarget(ThreadID tid) { assert(ftqHasFetching(tid)); return ftq.fetching(tid); }
 
     bool prefetchFilteredByUDP(ThreadID tid) const;
+    uint64_t upstreamUdpCycle() const;
+    void accountUpstreamUdpEvents();
 
     enum PrefetchFailReason
     {
         NO_CANDIDATE, // no candidate is generated, i.e. pfPtr == ifPtr
         TOO_FAR,      // candidate is too far from fetch point
         UDP_FILTERED, // candidate is filtered by UDP (off-path)
+        UPSTREAM_UDP_FILTERED,
     };
     bool prefetchTooFar(ThreadID tid) const;
     bool prefetchAvailable(ThreadID tid) const;

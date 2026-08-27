@@ -978,6 +978,7 @@ class Fetch
     bool enableFdip{true};
     bool enablePdip{false};
     bool enableUdp{false};
+    bool enableUpstreamUdp{false};
 
     /** Event used to delay fault generation of translation faults */
     FinishTranslationEvent finishTranslationEvent;
@@ -1104,6 +1105,8 @@ class Fetch
         statistics::Scalar distanceFilteredPrefetch;
         /** Stat for total number of UDP-filtered prefetch requests. */
         statistics::Scalar udpFilteredPrefetch;
+        /** Stat for paper UDP useful-set filtered prefetch requests. */
+        statistics::Scalar upstreamUdpFilteredPrefetch;
         /** Total number of outstanding icache accesses that were dropped
          * due to a squash.
          */

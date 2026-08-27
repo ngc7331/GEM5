@@ -554,7 +554,7 @@ struct FullBTBPrediction
     OverrideReason overrideReason;
     Tick predTick;
 
-    int getUdpConfidenceDelta() const {
+    int getPathConfidencePenalty() const {
         int delta = 0;
         for (const auto &entry : btbEntries) {
             if (!entry.valid) {
@@ -583,6 +583,10 @@ struct FullBTBPrediction
         }
 
         return delta;
+    }
+
+    int getUdpConfidenceDelta() const {
+        return getPathConfidencePenalty();
     }
 
     //only use for countering the source of the prediction

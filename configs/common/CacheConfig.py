@@ -399,6 +399,7 @@ def config_cache(options, system):
             system.cpu[i].enableFdip = not options.disable_fdip
             system.cpu[i].enablePdip = options.enable_pdip
             system.cpu[i].enableUdp = options.enable_udp
+            system.cpu[i].enableUpstreamUdp = options.enable_upstream_udp
             system.cpu[i].branchPred.useStaticPrefetchDistance = not options.fdip_no_use_static_distance
             system.cpu[i].branchPred.staticPrefetchDistance = options.fdip_static_distance
 

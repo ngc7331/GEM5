@@ -478,11 +478,36 @@ def _finish_xiangshan_system(args, test_sys, TestCPUClass, ruby):
             print(f"  useUdpInitConfidence: {args.udp_init_conf is not None}")
             print(f"  udpInitConfidence: {args.udp_init_conf}")
 
+        if args.enable_upstream_udp:
+            print("IPrefetch: upstream UDP enabled")
+            print(f"  offPathThreshold: {args.upstream_udp_off_path_threshold}")
+            print(f"  seniorityHoldCycles: {args.upstream_udp_seniority_hold_cycles}")
+            print(
+                "  bloomBits: "
+                f"{args.upstream_udp_bloom_one_bits}/"
+                f"{args.upstream_udp_bloom_two_bits}/"
+                f"{args.upstream_udp_bloom_four_bits}"
+            )
+
         test_sys.cpu[i].branchPred = DecoupledBPUWithBTB(
             bpDBSwitches=bp_db_switches,
             enableUdp=args.enable_udp,
             useUdpInitConfidence=args.udp_init_conf is not None,
             udpInitConfidence=args.udp_init_conf if args.udp_init_conf is not None else 0,
+            enableUpstreamUdp=args.enable_upstream_udp,
+            upstreamUdpOffPathThreshold=args.upstream_udp_off_path_threshold,
+            upstreamUdpSeniorityHoldCycles=args.upstream_udp_seniority_hold_cycles,
+            upstreamUdpBloomOneBits=args.upstream_udp_bloom_one_bits,
+            upstreamUdpBloomTwoBits=args.upstream_udp_bloom_two_bits,
+            upstreamUdpBloomFourBits=args.upstream_udp_bloom_four_bits,
+            upstreamUdpBloomHashes=args.upstream_udp_bloom_hashes,
+            upstreamUdpBloomOneEntries=args.upstream_udp_bloom_one_entries,
+            upstreamUdpBloomTwoEntries=args.upstream_udp_bloom_two_entries,
+            upstreamUdpBloomFourEntries=args.upstream_udp_bloom_four_entries,
+            upstreamUdpBloomClearPeriod=args.upstream_udp_bloom_clear_period,
+            upstreamUdpBloomClearUnusefulPermille=(
+                args.upstream_udp_bloom_clear_unuseful_permille
+            ),
         )
         test_sys.cpu[i].branchPred.isDumpMisspredPC = True
 
@@ -972,6 +997,66 @@ def xiangshan_system_init():
         default=None,
     )
     parser.add_argument(
+        "--enable-upstream-udp",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
+        "--upstream-udp-off-path-threshold",
+        type=int,
+        default=300,
+    )
+    parser.add_argument(
+        "--upstream-udp-seniority-hold-cycles",
+        type=int,
+        default=30000,
+    )
+    parser.add_argument(
+        "--upstream-udp-bloom-one-bits",
+        type=int,
+        default=43648,
+    )
+    parser.add_argument(
+        "--upstream-udp-bloom-two-bits",
+        type=int,
+        default=10944,
+    )
+    parser.add_argument(
+        "--upstream-udp-bloom-four-bits",
+        type=int,
+        default=10944,
+    )
+    parser.add_argument(
+        "--upstream-udp-bloom-hashes",
+        type=int,
+        default=6,
+    )
+    parser.add_argument(
+        "--upstream-udp-bloom-one-entries",
+        type=int,
+        default=4000,
+    )
+    parser.add_argument(
+        "--upstream-udp-bloom-two-entries",
+        type=int,
+        default=1000,
+    )
+    parser.add_argument(
+        "--upstream-udp-bloom-four-entries",
+        type=int,
+        default=1000,
+    )
+    parser.add_argument(
+        "--upstream-udp-bloom-clear-period",
+        type=int,
+        default=10000,
+    )
+    parser.add_argument(
+        "--upstream-udp-bloom-clear-unuseful-permille",
+        type=int,
+        default=750,
+    )
+    parser.add_argument(
         "--enable-pdip",
         action="store_true",
         default=False,
@@ -987,6 +1072,29 @@ def xiangshan_system_init():
     if '--ruby' in sys.argv:
         Ruby.define_options(parser)
     args = parser.parse_args()
+
+    if args.enable_udp and args.enable_upstream_udp:
+        parser.error("--enable-udp and --enable-upstream-udp are mutually exclusive")
+
+    upstream_udp_positive = {
+        "--upstream-udp-off-path-threshold": args.upstream_udp_off_path_threshold,
+        "--upstream-udp-seniority-hold-cycles": args.upstream_udp_seniority_hold_cycles,
+        "--upstream-udp-bloom-one-bits": args.upstream_udp_bloom_one_bits,
+        "--upstream-udp-bloom-two-bits": args.upstream_udp_bloom_two_bits,
+        "--upstream-udp-bloom-four-bits": args.upstream_udp_bloom_four_bits,
+        "--upstream-udp-bloom-hashes": args.upstream_udp_bloom_hashes,
+        "--upstream-udp-bloom-one-entries": args.upstream_udp_bloom_one_entries,
+        "--upstream-udp-bloom-two-entries": args.upstream_udp_bloom_two_entries,
+        "--upstream-udp-bloom-four-entries": args.upstream_udp_bloom_four_entries,
+        "--upstream-udp-bloom-clear-period": args.upstream_udp_bloom_clear_period,
+    }
+    for option, value in upstream_udp_positive.items():
+        if value <= 0:
+            parser.error(f"{option} must be positive")
+    if not 0 <= args.upstream_udp_bloom_clear_unuseful_permille <= 1000:
+        parser.error(
+            "--upstream-udp-bloom-clear-unuseful-permille must be in [0, 1000]"
+        )
 
     if args.disable_dp:
         args.l1d_hwp_type = None

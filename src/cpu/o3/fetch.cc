@@ -109,6 +109,7 @@ Fetch::Fetch(CPU *_cpu, const BaseO3CPUParams &params)
       enableFdip(params.enableFdip),
       enablePdip(params.enablePdip),
       enableUdp(params.enableUdp),
+      enableUpstreamUdp(params.enableUpstreamUdp),
       finishTranslationEvent(this), fetchStats(_cpu, this),
       valuePred(params.valuePred)
 {
@@ -248,6 +249,8 @@ Fetch::FetchStatGroup::FetchStatGroup(CPU *cpu, Fetch *fetch)
              "Number of prefetches filtered by distance"),
     ADD_STAT(udpFilteredPrefetch, statistics::units::Count::get(),
              "Number of prefetches filtered by UDP"),
+    ADD_STAT(upstreamUdpFilteredPrefetch, statistics::units::Count::get(),
+             "Number of prefetches filtered by upstream UDP"),
     ADD_STAT(icacheSquashes, statistics::units::Count::get(),
              "Number of outstanding Icache misses that were squashed"),
     ADD_STAT(tlbSquashes, statistics::units::Count::get(),
@@ -341,6 +344,8 @@ Fetch::FetchStatGroup::FetchStatGroup(CPU *cpu, Fetch *fetch)
             .prereq(distanceFilteredPrefetch);
         udpFilteredPrefetch
             .prereq(udpFilteredPrefetch);
+        upstreamUdpFilteredPrefetch
+            .prereq(upstreamUdpFilteredPrefetch);
         miscStallCycles
             .prereq(miscStallCycles);
         pendingDrainCycles
@@ -2378,6 +2383,11 @@ Fetch::handlePrefetch(ThreadID tid, bool fetchIsStall)
         if (failReason == DecoupledBPUWithBTB::PrefetchFailReason::UDP_FILTERED) {
             assert(enableUdp);
             ++fetchStats.udpFilteredPrefetch;
+        } else if (failReason ==
+                   DecoupledBPUWithBTB::PrefetchFailReason::
+                       UPSTREAM_UDP_FILTERED) {
+            assert(enableUpstreamUdp);
+            ++fetchStats.upstreamUdpFilteredPrefetch;
         } else if (failReason == DecoupledBPUWithBTB::PrefetchFailReason::TOO_FAR) {
             ++fetchStats.distanceFilteredPrefetch;
         }

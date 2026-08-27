@@ -147,6 +147,8 @@ class BaseCPU(ClockedObject):
     enableFdip = Param.Bool(True, "Enable FDIP instruction prefetch.")
     enablePdip = Param.Bool(False, "Enable PDIP instruction prefetch.")
     enableUdp = Param.Bool(False, "Enable UDP instruction prefetch.")
+    enableUpstreamUdp = Param.Bool(
+        False, "Enable upstream utility-driven UDP instruction prefetch.")
 
     _uncached_interrupt_response_ports = []
     _uncached_interrupt_request_ports = []

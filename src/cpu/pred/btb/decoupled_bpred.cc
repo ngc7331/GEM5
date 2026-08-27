@@ -69,6 +69,7 @@ DecoupledBPUWithBTB::DecoupledBPUWithBTB(const DecoupledBPUWithBTBParams &p)
     prefetchDistance(p.useStaticPrefetchDistance ? p.staticPrefetchDistance : p.ftq_size),
       enableUdp(p.enableUdp),
       udpInitConfidence(p.useUdpInitConfidence ? p.udpInitConfidence : p.ftq_size),
+      enableUpstreamUdp(p.enableUpstreamUdp),
       resolveBlockThreshold(p.resolveBlockThreshold),
       dbpBtbStats(this, p.numStages, p.fsq_size, maxInstsNum)
 {
@@ -77,6 +78,38 @@ DecoupledBPUWithBTB::DecoupledBPUWithBTB(const DecoupledBPUWithBTBParams &p)
              smtFTQThreshold > ftqEntries,
              "SMT FTQ threshold (%u) exceeds total FTQ entries (%u)",
              smtFTQThreshold, ftqEntries);
+    panic_if(enableUdp && enableUpstreamUdp,
+             "enableUdp and enableUpstreamUdp are mutually exclusive");
+    panic_if(enableUpstreamUdp &&
+             (p.upstreamUdpOffPathThreshold == 0 ||
+              p.upstreamUdpSeniorityHoldCycles == 0 ||
+              p.upstreamUdpBloomOneBits == 0 ||
+              p.upstreamUdpBloomTwoBits == 0 ||
+              p.upstreamUdpBloomFourBits == 0 ||
+              p.upstreamUdpBloomHashes == 0 ||
+              p.upstreamUdpBloomOneEntries == 0 ||
+              p.upstreamUdpBloomTwoEntries == 0 ||
+              p.upstreamUdpBloomFourEntries == 0 ||
+              p.upstreamUdpBloomClearPeriod == 0 ||
+              p.upstreamUdpBloomClearUnusefulPermille > 1000),
+             "invalid upstream UDP configuration");
+
+    if (enableUpstreamUdp) {
+        upstreamUdp = std::make_unique<UpstreamUDP>(UpstreamUDP::Config{
+            p.numThreads,
+            p.upstreamUdpOffPathThreshold,
+            p.upstreamUdpSeniorityHoldCycles,
+            p.upstreamUdpBloomOneBits,
+            p.upstreamUdpBloomTwoBits,
+            p.upstreamUdpBloomFourBits,
+            p.upstreamUdpBloomHashes,
+            p.upstreamUdpBloomOneEntries,
+            p.upstreamUdpBloomTwoEntries,
+            p.upstreamUdpBloomFourEntries,
+            p.upstreamUdpBloomClearPeriod,
+            p.upstreamUdpBloomClearUnusefulPermille,
+        });
+    }
 
     if (bpDBSwitches.size() > 0) {
         initDB();
@@ -260,6 +293,11 @@ DecoupledBPUWithBTB::tick()
 {
     DPRINTF(Override, "DecoupledBPUWithBTB::tick()\n");
 
+    if (enableUpstreamUdp) {
+        upstreamUdp->advance(upstreamUdpCycle());
+        accountUpstreamUdpEvents();
+    }
+
     ThreadID curTid = scheduleThread();
     if (curTid == InvalidThreadID) {
         return;
@@ -321,6 +359,21 @@ DecoupledBPUWithBTB::prefetchFilteredByUDP(ThreadID tid) const
     } else {
         return false;
     }
+}
+
+uint64_t
+DecoupledBPUWithBTB::upstreamUdpCycle() const
+{
+    assert(cpu);
+    return static_cast<uint64_t>(cpu->curCycle());
+}
+
+void
+DecoupledBPUWithBTB::accountUpstreamUdpEvents()
+{
+    auto events = upstreamUdp->drainEvents();
+    dbpBtbStats.upstreamUdpAgedUnuseful += events.agedUnuseful;
+    dbpBtbStats.upstreamUdpBloomClears += events.bloomClears;
 }
 
 bool
@@ -388,6 +441,19 @@ DecoupledBPUWithBTB::getPrefetchAddr(Addr &prefetchAddr, PrefetchFailReason &fai
         if (lastPrefetchAddr[tid] == aligned) {
             prefetchID[tid]++;
         } else {
+            if (enableUpstreamUdp) {
+                const auto decision = upstreamUdp->decide(aligned, tid);
+                if (decision == UpstreamUDP::Decision::Filtered) {
+                    upstreamUdp->recordFilteredCandidate(
+                        aligned, tid, upstreamUdpCycle());
+                    prefetchID[tid]++;
+                    failReason = PrefetchFailReason::UPSTREAM_UDP_FILTERED;
+                    return false;
+                }
+                if (decision == UpstreamUDP::Decision::UsefulSetHit) {
+                    ++dbpBtbStats.upstreamUdpUsefulSetHits;
+                }
+            }
             prefetchAddr = aligned;
             return true;
         }
@@ -400,6 +466,10 @@ DecoupledBPUWithBTB::getPrefetchAddr(Addr &prefetchAddr, PrefetchFailReason &fai
 void
 DecoupledBPUWithBTB::updatePrefetch(Addr prefetchAddr, ThreadID tid)
 {
+    if (enableUpstreamUdp) {
+        upstreamUdp->recordIssuedPrefetch(
+            prefetchAddr, tid, upstreamUdpCycle());
+    }
     prefetchID[tid]++;
     lastPrefetchAddr[tid] = prefetchAddr;
 }
@@ -638,6 +708,14 @@ DecoupledBPUWithBTB::processNewPrediction(ThreadID tid)
                 "UDP confidence decreased by %d to %d for FSQ entry %#lx\n",
                 decrement, threads[tid].udpConfidence, entry.startPC);
     }
+
+    if (enableUpstreamUdp) {
+        auto &finalPred = threads[tid].finalPred;
+        const unsigned penalty = finalPred.getPathConfidencePenalty();
+        if (upstreamUdp->addConfidencePenalty(tid, penalty)) {
+            ++dbpBtbStats.upstreamUdpOffPathEntries;
+        }
+    }
 }
 
 /**
@@ -672,6 +750,9 @@ DecoupledBPUWithBTB::handleSquash(ThreadID tid, unsigned target_id,
     fsqFlushFlag[tid] = true;
     // Set squashing state
     threads[tid].squashing = true;
+    if (enableUpstreamUdp && upstreamUdp->resetPathConfidence(tid)) {
+        ++dbpBtbStats.upstreamUdpPathResets;
+    }
 
     // Find the target being squashed
     if (!ftq.hasTarget(target_id, tid)) {

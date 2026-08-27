@@ -1225,3 +1225,28 @@ class DecoupledBPUWithBTB(BranchPredictor):
     enableUdp = Param.Bool(False, "Enable UDP instruction prefetcher support")
     useUdpInitConfidence = Param.Bool(False, "Use configured UDP initial confidence")
     udpInitConfidence = Param.Unsigned(128, "UDP initial confidence when enabled")
+
+    enableUpstreamUdp = Param.Bool(
+        False, "Enable the paper-faithful utility-driven UDP mechanism")
+    upstreamUdpOffPathThreshold = Param.Unsigned(
+        300, "Accumulated confidence penalty that marks the path as off-path")
+    upstreamUdpSeniorityHoldCycles = Param.Unsigned(
+        30000, "Cycles to retain filtered candidates in the Seniority-FTQ")
+    upstreamUdpBloomOneBits = Param.Unsigned(
+        43648, "Bits in the one-line useful-set Bloom filter")
+    upstreamUdpBloomTwoBits = Param.Unsigned(
+        10944, "Bits in the two-line useful-set Bloom filter")
+    upstreamUdpBloomFourBits = Param.Unsigned(
+        10944, "Bits in the four-line useful-set Bloom filter")
+    upstreamUdpBloomHashes = Param.Unsigned(
+        6, "Parallel hashes per upstream UDP Bloom filter lookup")
+    upstreamUdpBloomOneEntries = Param.Unsigned(
+        4000, "Insertion capacity of the one-line Bloom filter")
+    upstreamUdpBloomTwoEntries = Param.Unsigned(
+        1000, "Insertion capacity of the two-line Bloom filter")
+    upstreamUdpBloomFourEntries = Param.Unsigned(
+        1000, "Insertion capacity of the four-line Bloom filter")
+    upstreamUdpBloomClearPeriod = Param.Unsigned(
+        10000, "Cycles in an upstream UDP usefulness measurement window")
+    upstreamUdpBloomClearUnusefulPermille = Param.Unsigned(
+        750, "Unuseful ratio in permille that permits clearing a full filter")
