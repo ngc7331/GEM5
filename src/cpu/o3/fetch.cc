@@ -2410,6 +2410,22 @@ Fetch::sendPrefetchReq(Addr prefetchAddr, ThreadID tid, Addr pc)
     return success;
 }
 
+void
+Fetch::recvIcachePrefetchEviction(PacketPtr pkt, bool unused)
+{
+    if (!enableUpstreamUdp) {
+        return;
+    }
+    const auto metadata = pkt->req->getXsMetadata();
+    assert(metadata.validXsMetadata);
+    assert(metadata.prefetchSource == PrefetchSourceType::FDIP);
+    assert(metadata.validPrefetchVaddr);
+    assert(metadata.prefetchContextId != InvalidContextID);
+    const ThreadID tid = cpu->contextToThread(metadata.prefetchContextId);
+    dbpbtb->notifyIcachePrefetchEviction(
+        metadata.prefetchVaddr, tid, unused);
+}
+
 bool
 Fetch::sendFlushReq(ThreadID tid, Addr pc)
 {
@@ -2437,6 +2453,16 @@ Fetch::IcachePort::recvTimingResp(PacketPtr pkt)
     fetch->processCacheCompletion(pkt);
 
     return true;
+}
+
+void
+Fetch::IcachePort::recvFunctionalCustomSignal(PacketPtr pkt, int sig)
+{
+    if (sig == DcacheRespType::IcachePrefetchUsedEviction ||
+        sig == DcacheRespType::IcachePrefetchUnusedEviction) {
+        fetch->recvIcachePrefetchEviction(
+            pkt, sig == DcacheRespType::IcachePrefetchUnusedEviction);
+    }
 }
 
 void

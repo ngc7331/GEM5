@@ -2406,9 +2406,26 @@ BaseCache::invalidateBlock(CacheBlk *blk)
             prefetcher->sendCustomInfoToDownStream();
         }
     }
-    // If block is still marked as prefetched, then it hasn't been used
+    const auto xs_metadata = blk->getXsMetadata();
+    const bool unused_prefetch = blk->wasPrefetched();
+    if (cacheLevel == 1 && isReadOnly && blk->wasEverPrefetched() &&
+        xs_metadata.validXsMetadata &&
+        xs_metadata.prefetchSource == PrefetchSourceType::FDIP &&
+        xs_metadata.validPrefetchVaddr) {
+        RequestPtr req = std::make_shared<Request>(
+            regenerateBlkAddr(blk), blkSize, 0, Request::funcRequestorId);
+        req->setXsMetadata(xs_metadata);
+        Packet packet(req, MemCmd::ReadReq);
+        cpuSidePort.sendCustomSignal(
+            &packet, unused_prefetch
+                ? DcacheRespType::IcachePrefetchUnusedEviction
+                : DcacheRespType::IcachePrefetchUsedEviction);
+    }
+
+    // If block is still marked as prefetched, then it hasn't been used.
     if (blk->wasPrefetched()) {
-        prefetcher->prefetchUnused(regenerateBlkAddr(blk), blk->getXsMetadata().prefetchSource);
+        prefetcher->prefetchUnused(
+            regenerateBlkAddr(blk), xs_metadata.prefetchSource);
     }
 
     // Notify that the data contents for this address are no longer present

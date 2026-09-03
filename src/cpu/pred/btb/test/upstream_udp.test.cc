@@ -111,4 +111,103 @@ TEST(UpstreamUDPTest, IssuedPrefetchAgesAsUnuseful)
     EXPECT_EQ(udp.drainEvents().agedUnuseful, 0);
 }
 
+TEST(UpstreamUDPTest, CandidateAndBloomDiagnostics)
+{
+    auto cfg = config(1);
+    cfg.bloomOneBits = 1;
+    UpstreamUDP udp(cfg);
+
+    EXPECT_EQ(udp.decide(0x1000, 0), UpstreamUDP::Decision::OnPath);
+    ASSERT_TRUE(udp.addConfidencePenalty(0, 1));
+    EXPECT_EQ(udp.decide(0x1000, 0), UpstreamUDP::Decision::Filtered);
+    EXPECT_EQ(udp.decide(0x1000, 0), UpstreamUDP::Decision::Filtered);
+
+    udp.recordFilteredCandidate(0x1000, 0, 1);
+    EXPECT_TRUE(udp.notifyCommit(0x1000, 0, 2).trained);
+    udp.recordFilteredCandidate(0x2000, 0, 3);
+    EXPECT_TRUE(udp.notifyCommit(0x2000, 0, 4).trained);
+
+    // The one-bit filter must hit, while the exact shadow set does not.
+    EXPECT_EQ(udp.decide(0x3000, 0),
+              UpstreamUDP::Decision::UsefulSetHit);
+    const auto events = udp.drainEvents();
+    EXPECT_EQ(events.onPathCandidates, 1);
+    EXPECT_EQ(events.offPathCandidates, 3);
+    EXPECT_EQ(events.uniqueOffPathCandidates, 2);
+    EXPECT_EQ(events.repeatedOffPathCandidates, 1);
+    EXPECT_EQ(events.usefulSetHits, 1);
+    EXPECT_EQ(events.usefulSetFalsePositiveProxy, 1);
+    EXPECT_EQ(events.bloomOneQueries, 3);
+    EXPECT_EQ(events.bloomOneHits, 1);
+    EXPECT_EQ(events.bloomOneInsertions, 1);
+
+    const auto snapshot = udp.snapshot();
+    EXPECT_EQ(snapshot.bloomOneInsertions, 1);
+    EXPECT_EQ(snapshot.bloomOneBitsSet, 1);
+    EXPECT_EQ(snapshot.bloomOneExactEntries, 1);
+}
+
+TEST(UpstreamUDPTest, RealEvictionsDriveBloomClear)
+{
+    auto cfg = config(1);
+    cfg.bloomOneEntries = 1;
+    cfg.bloomClearPeriod = 100;
+    UpstreamUDP udp(cfg);
+    ASSERT_TRUE(udp.addConfidencePenalty(0, 1));
+
+    udp.notifyEviction(0x8000, 0, true, 1);
+    udp.notifyEviction(0x9000, 0, true, 2);
+    udp.notifyEviction(0xa000, 0, false, 3);
+
+    udp.recordFilteredCandidate(0x1000, 0, 4);
+    EXPECT_TRUE(udp.notifyCommit(0x1000, 0, 5).trained);
+    udp.recordFilteredCandidate(0x2000, 0, 6);
+    EXPECT_TRUE(udp.notifyCommit(0x2000, 0, 7).trained);
+    udp.recordFilteredCandidate(0x3000, 0, 8);
+    EXPECT_TRUE(udp.notifyCommit(0x3000, 0, 9).trained);
+
+    // Two unused out of three evictions are below the 75% threshold.
+    const auto before_threshold = udp.drainEvents();
+    EXPECT_EQ(before_threshold.evictionUnuseful, 2);
+    EXPECT_EQ(before_threshold.evictionUseful, 1);
+    EXPECT_EQ(before_threshold.bloomClears, 0);
+    udp.notifyEviction(0xb000, 0, true, 10);
+    udp.recordFilteredCandidate(0x4000, 0, 11);
+    EXPECT_TRUE(udp.notifyCommit(0x4000, 0, 12).trained);
+
+    const auto events = udp.drainEvents();
+    EXPECT_EQ(events.evictionUnuseful, 1);
+    EXPECT_EQ(events.evictionUseful, 0);
+    EXPECT_EQ(events.bloomOneClears, 1);
+    EXPECT_EQ(events.bloomClears, 1);
+    EXPECT_EQ(events.agedUnuseful, 0);
+}
+
+TEST(UpstreamUDPTest, TakenBtbMissMarksPathBeforeRecovery)
+{
+    UpstreamUDP udp(config(3));
+    EXPECT_EQ(udp.decide(0x1000, 0), UpstreamUDP::Decision::OnPath);
+    EXPECT_EQ(udp.decide(0x2000, 0), UpstreamUDP::Decision::OnPath);
+
+    const auto miss = udp.signalTakenBtbMiss(0);
+    EXPECT_FALSE(miss.alreadyOffPath);
+    EXPECT_EQ(miss.exposedCandidates, 2);
+    EXPECT_TRUE(udp.isOffPath(0));
+    EXPECT_EQ(udp.decide(0x3000, 0), UpstreamUDP::Decision::Filtered);
+    EXPECT_TRUE(udp.resetPathConfidence(0));
+    EXPECT_FALSE(udp.isOffPath(0));
+
+    ASSERT_TRUE(udp.addConfidencePenalty(0, 3));
+    const auto overlap = udp.signalTakenBtbMiss(0);
+    EXPECT_TRUE(overlap.alreadyOffPath);
+    EXPECT_EQ(overlap.exposedCandidates, 0);
+    EXPECT_TRUE(udp.resetPathConfidence(0));
+
+    const auto events = udp.drainEvents();
+    EXPECT_EQ(events.takenBtbMisses, 2);
+    EXPECT_EQ(events.takenBtbMissNewOffPath, 1);
+    EXPECT_EQ(events.takenBtbMissAlreadyOffPath, 1);
+    EXPECT_EQ(events.takenBtbMissExposedCandidates, 2);
+}
+
 } // anonymous namespace

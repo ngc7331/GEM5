@@ -48,7 +48,12 @@ UpstreamUDP::Bloom::insert(uint64_t value)
 {
     for (unsigned hash = 0; hash < hashCount; ++hash) {
         const uint64_t index = mix(value + hashSeed * (hash + 1)) % bitCount;
-        words[index / 64] |= 1ULL << (index % 64);
+        const uint64_t bit = 1ULL << (index % 64);
+        auto &word = words[index / 64];
+        if ((word & bit) == 0) {
+            word |= bit;
+            ++setBits;
+        }
     }
 }
 
@@ -56,6 +61,7 @@ void
 UpstreamUDP::Bloom::clear()
 {
     std::fill(words.begin(), words.end(), 0);
+    setBits = 0;
 }
 
 UpstreamUDP::UpstreamUDP(const Config &config)
@@ -74,6 +80,9 @@ UpstreamUDP::UpstreamUDP(const Config &config)
       bloomFour(config.bloomFourBits, config.bloomHashes,
                 0xa4093822299f31d0ULL),
       pathConfidence(numThreads, 0),
+      forcedOffPath(numThreads, false),
+      episodeOnPathCandidates(numThreads, 0),
+      episodeOffPathLines(numThreads),
       seniorityFtq(numThreads),
       outstandingPrefetches(numThreads),
       streamBuffers(numThreads)
@@ -98,11 +107,35 @@ bool
 UpstreamUDP::addConfidencePenalty(ThreadID tid, unsigned penalty)
 {
     checkThread(tid);
+    if (penalty == 0) {
+        ++pendingEvents.penaltyZero;
+    } else if (penalty == 1) {
+        ++pendingEvents.penaltyOne;
+    } else {
+        ++pendingEvents.penaltyTwoOrMore;
+    }
     const bool was_off_path = isOffPath(tid);
     pathConfidence[tid] = std::min<uint64_t>(
         std::numeric_limits<uint64_t>::max() - penalty,
         pathConfidence[tid]) + penalty;
     return !was_off_path && isOffPath(tid);
+}
+
+UpstreamUDP::TakenBtbMissResult
+UpstreamUDP::signalTakenBtbMiss(ThreadID tid)
+{
+    checkThread(tid);
+    TakenBtbMissResult result{
+        isOffPath(tid), episodeOnPathCandidates[tid]};
+    forcedOffPath[tid] = true;
+    ++pendingEvents.takenBtbMisses;
+    pendingEvents.takenBtbMissExposedCandidates += result.exposedCandidates;
+    if (result.alreadyOffPath) {
+        ++pendingEvents.takenBtbMissAlreadyOffPath;
+    } else {
+        ++pendingEvents.takenBtbMissNewOffPath;
+    }
+    return result;
 }
 
 bool
@@ -111,6 +144,9 @@ UpstreamUDP::resetPathConfidence(ThreadID tid)
     checkThread(tid);
     const bool was_off_path = isOffPath(tid);
     pathConfidence[tid] = 0;
+    forcedOffPath[tid] = false;
+    episodeOnPathCandidates[tid] = 0;
+    episodeOffPathLines[tid].clear();
     return was_off_path;
 }
 
@@ -118,7 +154,7 @@ bool
 UpstreamUDP::isOffPath(ThreadID tid) const
 {
     checkThread(tid);
-    return pathConfidence[tid] >= offPathThreshold;
+    return forcedOffPath[tid] || pathConfidence[tid] >= offPathThreshold;
 }
 
 uint64_t
@@ -134,14 +170,52 @@ UpstreamUDP::usefulSetContains(uint64_t line) const
            bloomFour.contains(line >> 2);
 }
 
-UpstreamUDP::Decision
-UpstreamUDP::decide(Addr blockAddr, ThreadID tid) const
+UpstreamUDP::UsefulSetLookup
+UpstreamUDP::lookupUsefulSet(uint64_t line)
 {
+    UsefulSetLookup result;
+    ++pendingEvents.bloomOneQueries;
+    ++pendingEvents.bloomTwoQueries;
+    ++pendingEvents.bloomFourQueries;
+    result.oneHit = bloomOne.contains(line);
+    result.twoHit = bloomTwo.contains(line >> 1);
+    result.fourHit = bloomFour.contains(line >> 2);
+    pendingEvents.bloomOneHits += result.oneHit;
+    pendingEvents.bloomTwoHits += result.twoHit;
+    pendingEvents.bloomFourHits += result.fourHit;
+    result.exactHit = bloomOneExact.count(line) != 0 ||
+                      bloomTwoExact.count(line >> 1) != 0 ||
+                      bloomFourExact.count(line >> 2) != 0;
+    return result;
+}
+
+UpstreamUDP::Decision
+UpstreamUDP::decide(Addr blockAddr, ThreadID tid)
+{
+    checkThread(tid);
     if (!isOffPath(tid)) {
+        ++pendingEvents.onPathCandidates;
+        ++episodeOnPathCandidates[tid];
         return Decision::OnPath;
     }
-    return usefulSetContains(lineAddress(blockAddr)) ? Decision::UsefulSetHit
-                                                     : Decision::Filtered;
+
+    ++pendingEvents.offPathCandidates;
+    const uint64_t line = lineAddress(blockAddr);
+    if (episodeOffPathLines[tid].insert(line).second) {
+        ++pendingEvents.uniqueOffPathCandidates;
+    } else {
+        ++pendingEvents.repeatedOffPathCandidates;
+    }
+
+    const auto lookup = lookupUsefulSet(line);
+    if (!lookup.hit()) {
+        return Decision::Filtered;
+    }
+    ++pendingEvents.usefulSetHits;
+    if (!lookup.exactHit) {
+        ++pendingEvents.usefulSetFalsePositiveProxy;
+    }
+    return Decision::UsefulSetHit;
 }
 
 void
@@ -153,6 +227,9 @@ UpstreamUDP::recordFilteredCandidate(Addr blockAddr, ThreadID tid,
     auto &entries = seniorityFtq[tid];
     if (entries.empty() || entries.back().line != line) {
         entries.push_back({line, cycle});
+        ++pendingEvents.seniorityAdds;
+    } else {
+        ++pendingEvents.seniorityDuplicateAdds;
     }
 }
 
@@ -161,11 +238,32 @@ UpstreamUDP::recordIssuedPrefetch(Addr blockAddr, ThreadID tid,
                                   uint64_t cycle)
 {
     checkThread(tid);
-    ++windowNewPrefetches;
+    ++pendingEvents.issuedPrefetches;
     const uint64_t line = lineAddress(blockAddr);
     auto &entries = outstandingPrefetches[tid];
     if (entries.empty() || entries.back().line != line) {
         entries.push_back({line, cycle});
+    }
+}
+
+void
+UpstreamUDP::notifyEviction(Addr prefetchVaddr, ThreadID tid, bool unused,
+                            uint64_t cycle)
+{
+    checkThread(tid);
+    advance(cycle);
+    const uint64_t line = lineAddress(prefetchVaddr);
+    auto &outstanding = outstandingPrefetches[tid];
+    outstanding.erase(
+        std::remove_if(outstanding.begin(), outstanding.end(),
+            [line](const TimedLine &entry) { return entry.line == line; }),
+        outstanding.end());
+    ++windowEvictedPrefetches;
+    if (unused) {
+        ++windowUnusefulEvictions;
+        ++pendingEvents.evictionUnuseful;
+    } else {
+        ++pendingEvents.evictionUseful;
     }
 }
 
@@ -199,17 +297,21 @@ UpstreamUDP::trainLine(uint64_t line, ThreadID tid)
 }
 
 void
-UpstreamUDP::maybeClear(Bloom &filter, uint64_t &insertions,
-                        uint64_t capacity)
+UpstreamUDP::maybeClear(Bloom &filter,
+                        std::unordered_set<uint64_t> &exactSet,
+                        uint64_t &insertions, uint64_t capacity,
+                        uint64_t &clearEvents)
 {
     const uint64_t min_samples = std::max<uint64_t>(1, bloomClearPeriod / 100);
-    const bool high_unuseful = windowNewPrefetches != 0 &&
-        windowUnusefulPrefetches * 1000 >
-            windowNewPrefetches * bloomClearUnusefulPermille;
-    if (insertions >= capacity && windowNewPrefetches > min_samples &&
+    const bool high_unuseful = windowEvictedPrefetches != 0 &&
+        windowUnusefulEvictions * 1000 >=
+            windowEvictedPrefetches * bloomClearUnusefulPermille;
+    if (insertions >= capacity && windowEvictedPrefetches > min_samples &&
         high_unuseful) {
         filter.clear();
+        exactSet.clear();
         insertions = 0;
+        ++clearEvents;
         ++pendingEvents.bloomClears;
     }
 }
@@ -220,9 +322,12 @@ UpstreamUDP::insertOne(uint64_t line)
     if (bloomTwo.contains(line >> 1) || bloomFour.contains(line >> 2)) {
         return;
     }
-    maybeClear(bloomOne, bloomOneInsertions, bloomOneCapacity);
+    maybeClear(bloomOne, bloomOneExact, bloomOneInsertions,
+               bloomOneCapacity, pendingEvents.bloomOneClears);
     bloomOne.insert(line);
+    bloomOneExact.insert(line);
     ++bloomOneInsertions;
+    ++pendingEvents.bloomOneInsertions;
 }
 
 void
@@ -236,9 +341,12 @@ UpstreamUDP::insertTwo(uint64_t line)
     if (bloomFour.contains(line >> 2) || bloomTwo.contains(line >> 1)) {
         return;
     }
-    maybeClear(bloomTwo, bloomTwoInsertions, bloomTwoCapacity);
+    maybeClear(bloomTwo, bloomTwoExact, bloomTwoInsertions,
+               bloomTwoCapacity, pendingEvents.bloomTwoClears);
     bloomTwo.insert(line >> 1);
+    bloomTwoExact.insert(line >> 1);
     ++bloomTwoInsertions;
+    ++pendingEvents.bloomTwoInsertions;
 }
 
 void
@@ -249,9 +357,12 @@ UpstreamUDP::insertFour(uint64_t line)
         insertTwo(line + 2);
         return;
     }
-    maybeClear(bloomFour, bloomFourInsertions, bloomFourCapacity);
+    maybeClear(bloomFour, bloomFourExact, bloomFourInsertions,
+               bloomFourCapacity, pendingEvents.bloomFourClears);
     bloomFour.insert(line >> 2);
+    bloomFourExact.insert(line >> 2);
     ++bloomFourInsertions;
+    ++pendingEvents.bloomFourInsertions;
 }
 
 void
@@ -322,8 +433,8 @@ UpstreamUDP::advance(uint64_t cycle)
 {
     if (cycle - windowStartCycle > bloomClearPeriod) {
         windowStartCycle = cycle;
-        windowNewPrefetches = 0;
-        windowUnusefulPrefetches = 0;
+        windowEvictedPrefetches = 0;
+        windowUnusefulEvictions = 0;
     }
 
     for (ThreadID tid = 0; tid < numThreads; ++tid) {
@@ -331,16 +442,37 @@ UpstreamUDP::advance(uint64_t cycle)
         while (!candidates.empty() &&
                cycle - candidates.front().cycle > seniorityHoldCycles) {
             candidates.pop_front();
+            ++pendingEvents.seniorityExpired;
         }
 
         auto &outstanding = outstandingPrefetches[tid];
         while (!outstanding.empty() &&
                cycle - outstanding.front().cycle > seniorityHoldCycles) {
             outstanding.pop_front();
-            ++windowUnusefulPrefetches;
             ++pendingEvents.agedUnuseful;
         }
     }
+}
+
+UpstreamUDP::Snapshot
+UpstreamUDP::snapshot() const
+{
+    Snapshot result{
+        bloomOneInsertions,
+        bloomTwoInsertions,
+        bloomFourInsertions,
+        bloomOne.occupancy(),
+        bloomTwo.occupancy(),
+        bloomFour.occupancy(),
+        bloomOneExact.size(),
+        bloomTwoExact.size(),
+        bloomFourExact.size(),
+    };
+    for (ThreadID tid = 0; tid < numThreads; ++tid) {
+        result.seniorityEntries += seniorityFtq[tid].size();
+        result.outstandingPrefetches += outstandingPrefetches[tid].size();
+    }
+    return result;
 }
 
 UpstreamUDP::Events

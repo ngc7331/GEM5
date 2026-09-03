@@ -109,6 +109,8 @@ class Fetch
          * proper status to start fetching. */
         virtual bool recvTimingResp(PacketPtr pkt);
 
+        void recvFunctionalCustomSignal(PacketPtr pkt, int sig) override;
+
         /** Handles doing a retry of a failed fetch. */
         virtual void recvReqRetry();
     };
@@ -539,6 +541,8 @@ class Fetch
     void handlePrefetch(ThreadID tid, bool fetchIsStall);
 
     bool sendPrefetchReq(Addr prefetchAddr, ThreadID tid, Addr pc);
+
+    void recvIcachePrefetchEviction(PacketPtr pkt, bool unused);
 
     bool sendFlushReq(ThreadID tid, Addr pc);
 

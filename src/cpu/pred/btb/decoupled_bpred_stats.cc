@@ -401,7 +401,8 @@ classifyBranchImpl(const InstPtr &inst)
 } // anonymous namespace
 
 DecoupledBPUWithBTB::DBPBTBStats::DBPBTBStats(
-    statistics::Group* parent, unsigned numStages, unsigned fsqSize, unsigned maxInstsNum):
+    DecoupledBPUWithBTB* parent, unsigned numStages, unsigned fsqSize,
+    unsigned maxInstsNum):
     statistics::Group(parent),
     ADD_STAT(condNum, statistics::units::Count::get(), "the number of cond branches"),
     ADD_STAT(uncondNum, statistics::units::Count::get(), "the number of uncond branches"),
@@ -470,24 +471,168 @@ DecoupledBPUWithBTB::DBPBTBStats::DBPBTBStats(
              "Number of transitions to assumed off-path in upstream UDP"),
     ADD_STAT(upstreamUdpPathResets, statistics::units::Count::get(),
              "Number of upstream UDP path confidence resets"),
+    ADD_STAT(upstreamUdpPenaltyZero, statistics::units::Count::get(),
+             "Upstream UDP prediction blocks with zero path penalty"),
+    ADD_STAT(upstreamUdpPenaltyOne, statistics::units::Count::get(),
+             "Upstream UDP prediction blocks with path penalty one"),
+    ADD_STAT(upstreamUdpPenaltyTwoOrMore, statistics::units::Count::get(),
+             "Upstream UDP prediction blocks with path penalty at least two"),
+    ADD_STAT(upstreamUdpOnPathCandidates, statistics::units::Count::get(),
+             "Upstream UDP candidates classified on-path"),
+    ADD_STAT(upstreamUdpOffPathCandidates, statistics::units::Count::get(),
+             "Upstream UDP candidates classified off-path"),
+    ADD_STAT(upstreamUdpUniqueOffPathCandidates,
+             statistics::units::Count::get(),
+             "First query of an off-path line in a recovery episode"),
+    ADD_STAT(upstreamUdpRepeatedOffPathCandidates,
+             statistics::units::Count::get(),
+             "Repeated query of an off-path line in a recovery episode"),
     ADD_STAT(upstreamUdpUsefulSetHits, statistics::units::Count::get(),
              "Number of off-path candidates admitted by the useful-set"),
+    ADD_STAT(upstreamUdpUsefulSetFalsePositiveProxy,
+             statistics::units::Count::get(),
+             "Useful-set hits absent from exact shadow sets"),
+    ADD_STAT(upstreamUdpBloomOneQueries, statistics::units::Count::get(),
+             "One-line Bloom queries for off-path candidates"),
+    ADD_STAT(upstreamUdpBloomTwoQueries, statistics::units::Count::get(),
+             "Two-line Bloom queries for off-path candidates"),
+    ADD_STAT(upstreamUdpBloomFourQueries, statistics::units::Count::get(),
+             "Four-line Bloom queries for off-path candidates"),
+    ADD_STAT(upstreamUdpBloomOneHits, statistics::units::Count::get(),
+             "One-line Bloom hits for off-path candidates"),
+    ADD_STAT(upstreamUdpBloomTwoHits, statistics::units::Count::get(),
+             "Two-line Bloom hits for off-path candidates"),
+    ADD_STAT(upstreamUdpBloomFourHits, statistics::units::Count::get(),
+             "Four-line Bloom hits for off-path candidates"),
+    ADD_STAT(upstreamUdpBloomOneInsertions, statistics::units::Count::get(),
+             "One-line Bloom insertions"),
+    ADD_STAT(upstreamUdpBloomTwoInsertions, statistics::units::Count::get(),
+             "Two-line Bloom insertions"),
+    ADD_STAT(upstreamUdpBloomFourInsertions, statistics::units::Count::get(),
+             "Four-line Bloom insertions"),
+    ADD_STAT(upstreamUdpBloomOneClears, statistics::units::Count::get(),
+             "One-line Bloom clears"),
+    ADD_STAT(upstreamUdpBloomTwoClears, statistics::units::Count::get(),
+             "Two-line Bloom clears"),
+    ADD_STAT(upstreamUdpBloomFourClears, statistics::units::Count::get(),
+             "Four-line Bloom clears"),
     ADD_STAT(upstreamUdpSeniorityHits, statistics::units::Count::get(),
              "Number of committed instructions matching the Seniority-FTQ"),
     ADD_STAT(upstreamUdpSeniorityMisses, statistics::units::Count::get(),
              "Number of committed instructions missing the Seniority-FTQ"),
+    ADD_STAT(upstreamUdpSeniorityAdds, statistics::units::Count::get(),
+             "Unique candidate lines added to the Seniority-FTQ"),
+    ADD_STAT(upstreamUdpSeniorityDuplicateAdds,
+             statistics::units::Count::get(),
+             "Consecutive duplicate Seniority-FTQ additions suppressed"),
+    ADD_STAT(upstreamUdpSeniorityExpired, statistics::units::Count::get(),
+             "Seniority-FTQ candidates expired before commit"),
     ADD_STAT(upstreamUdpUsefulSetTrains, statistics::units::Count::get(),
              "Number of useful candidates trained from commit"),
+    ADD_STAT(upstreamUdpIssuedPrefetches, statistics::units::Count::get(),
+             "Prefetches issued after upstream UDP admission"),
     ADD_STAT(upstreamUdpAgedUnuseful, statistics::units::Count::get(),
-             "Number of issued prefetches unused for the Seniority hold window"),
+             "Issued prefetches unmatched by commit for the hold window"),
+    ADD_STAT(upstreamUdpEvictionUseful, statistics::units::Count::get(),
+             "FDIP L1I blocks used by demand before eviction"),
+    ADD_STAT(upstreamUdpEvictionUnuseful, statistics::units::Count::get(),
+             "FDIP L1I blocks unused by demand before eviction"),
+    ADD_STAT(upstreamUdpTakenBtbMisses, statistics::units::Count::get(),
+             "Actual taken branches absent from prediction-time BTB entries"),
+    ADD_STAT(upstreamUdpTakenBtbMissAlreadyOffPath,
+             statistics::units::Count::get(),
+             "Taken BTB misses already classified off-path by confidence"),
+    ADD_STAT(upstreamUdpTakenBtbMissNewOffPath,
+             statistics::units::Count::get(),
+             "Taken BTB misses newly classifying the path off-path"),
+    ADD_STAT(upstreamUdpTakenBtbMissExposedCandidates,
+             statistics::units::Count::get(),
+             "On-path candidate decisions before late taken-BTB-miss signals"),
     ADD_STAT(upstreamUdpBloomClears, statistics::units::Count::get(),
-             "Number of upstream UDP Bloom filter clears")
+             "Number of upstream UDP Bloom filter clears"),
+    ADD_STAT(upstreamUdpBloomOneCurrentInsertions,
+             statistics::units::Count::get(),
+             "Current one-line Bloom insertions since its last clear"),
+    ADD_STAT(upstreamUdpBloomTwoCurrentInsertions,
+             statistics::units::Count::get(),
+             "Current two-line Bloom insertions since its last clear"),
+    ADD_STAT(upstreamUdpBloomFourCurrentInsertions,
+             statistics::units::Count::get(),
+             "Current four-line Bloom insertions since its last clear"),
+    ADD_STAT(upstreamUdpBloomOneCurrentBitsSet,
+             statistics::units::Count::get(),
+             "Current set bits in the one-line Bloom"),
+    ADD_STAT(upstreamUdpBloomTwoCurrentBitsSet,
+             statistics::units::Count::get(),
+             "Current set bits in the two-line Bloom"),
+    ADD_STAT(upstreamUdpBloomFourCurrentBitsSet,
+             statistics::units::Count::get(),
+             "Current set bits in the four-line Bloom"),
+    ADD_STAT(upstreamUdpBloomOneCurrentExactEntries,
+             statistics::units::Count::get(),
+             "Current exact shadow entries for the one-line Bloom"),
+    ADD_STAT(upstreamUdpBloomTwoCurrentExactEntries,
+             statistics::units::Count::get(),
+             "Current exact shadow entries for the two-line Bloom"),
+    ADD_STAT(upstreamUdpBloomFourCurrentExactEntries,
+             statistics::units::Count::get(),
+             "Current exact shadow entries for the four-line Bloom"),
+    ADD_STAT(upstreamUdpCurrentSeniorityEntries,
+             statistics::units::Count::get(),
+             "Current entries across upstream UDP Seniority-FTQs"),
+    ADD_STAT(upstreamUdpCurrentOutstandingPrefetches,
+             statistics::units::Count::get(),
+             "Current prefetches tracked by the aged-usefulness proxy")
 
 {
     predsOfEachStage.init(numStages);
     commitPredsFromEachStage.init(numStages+1);
     commitOverrideBubbleNum = commitPredsFromEachStage[1] + 2 * commitPredsFromEachStage[2] ;
     commitOverrideCount = commitPredsFromEachStage[1] + commitPredsFromEachStage[2];
+    upstreamUdpBloomOneCurrentInsertions.functor([parent]() {
+        return parent->upstreamUdp ?
+            parent->upstreamUdp->snapshot().bloomOneInsertions : 0;
+    });
+    upstreamUdpBloomTwoCurrentInsertions.functor([parent]() {
+        return parent->upstreamUdp ?
+            parent->upstreamUdp->snapshot().bloomTwoInsertions : 0;
+    });
+    upstreamUdpBloomFourCurrentInsertions.functor([parent]() {
+        return parent->upstreamUdp ?
+            parent->upstreamUdp->snapshot().bloomFourInsertions : 0;
+    });
+    upstreamUdpBloomOneCurrentBitsSet.functor([parent]() {
+        return parent->upstreamUdp ?
+            parent->upstreamUdp->snapshot().bloomOneBitsSet : 0;
+    });
+    upstreamUdpBloomTwoCurrentBitsSet.functor([parent]() {
+        return parent->upstreamUdp ?
+            parent->upstreamUdp->snapshot().bloomTwoBitsSet : 0;
+    });
+    upstreamUdpBloomFourCurrentBitsSet.functor([parent]() {
+        return parent->upstreamUdp ?
+            parent->upstreamUdp->snapshot().bloomFourBitsSet : 0;
+    });
+    upstreamUdpBloomOneCurrentExactEntries.functor([parent]() {
+        return parent->upstreamUdp ?
+            parent->upstreamUdp->snapshot().bloomOneExactEntries : 0;
+    });
+    upstreamUdpBloomTwoCurrentExactEntries.functor([parent]() {
+        return parent->upstreamUdp ?
+            parent->upstreamUdp->snapshot().bloomTwoExactEntries : 0;
+    });
+    upstreamUdpBloomFourCurrentExactEntries.functor([parent]() {
+        return parent->upstreamUdp ?
+            parent->upstreamUdp->snapshot().bloomFourExactEntries : 0;
+    });
+    upstreamUdpCurrentSeniorityEntries.functor([parent]() {
+        return parent->upstreamUdp ?
+            parent->upstreamUdp->snapshot().seniorityEntries : 0;
+    });
+    upstreamUdpCurrentOutstandingPrefetches.functor([parent]() {
+        return parent->upstreamUdp ?
+            parent->upstreamUdp->snapshot().outstandingPrefetches : 0;
+    });
     fsqEntryDist.init(0, fsqSize, 20).flags(statistics::total);
     commitFsqEntryHasInsts.init(0, maxInstsNum >> 1, 1);
     commitFsqEntryFetchedInsts.init(0, maxInstsNum >> 1, 1);

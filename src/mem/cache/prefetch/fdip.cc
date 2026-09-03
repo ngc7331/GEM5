@@ -88,7 +88,13 @@ FDIP::getPacket()
 
     RequestPtr req = prefetchMSHR.front().req;
     req->setFlags(Request::PREFETCH);
-    req->setXsMetadata(Request::XsMetadata(PrefetchSourceType::FDIP));
+    Request::XsMetadata metadata(PrefetchSourceType::FDIP);
+    metadata.validPrefetchVaddr = req->hasVaddr() && req->hasContextId();
+    if (metadata.validPrefetchVaddr) {
+        metadata.prefetchVaddr = req->getVaddr();
+        metadata.prefetchContextId = req->contextId();
+    }
+    req->setXsMetadata(metadata);
     PacketPtr pkt = new Packet(req, MemCmd::HardPFReq);
     prefetchMSHR.pop_front();
     prefetchStats.pfIssued++;

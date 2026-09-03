@@ -97,6 +97,8 @@ enum DcacheRespType
     Miss,
     Hint,
     Bus_Clear,
+    IcachePrefetchUsedEviction,
+    IcachePrefetchUnusedEviction,
     NUM_Resp_Type
 };
 
@@ -384,35 +386,53 @@ class Request
         o3::XsDynInstMetaPtr instXsMetadata;
         PrefetchSourceType prefetchSource;
         int prefetchDepth;
+        bool validPrefetchVaddr;
+        Addr prefetchVaddr;
+        ContextID prefetchContextId;
 
         XsMetadata() :
             validXsMetadata(false),
             instXsMetadata(nullptr),
             prefetchSource(PF_NONE),
-            prefetchDepth(0) {}
+            prefetchDepth(0),
+            validPrefetchVaddr(false),
+            prefetchVaddr(0),
+            prefetchContextId(InvalidContextID) {}
 
         XsMetadata(o3::XsDynInstMetaPtr instMeta) :
             validXsMetadata(true),
             instXsMetadata(instMeta),
             prefetchSource(PF_NONE) ,
-            prefetchDepth(0) {}
+            prefetchDepth(0),
+            validPrefetchVaddr(false),
+            prefetchVaddr(0),
+            prefetchContextId(InvalidContextID) {}
 
         XsMetadata(PrefetchSourceType pfSource) :
             validXsMetadata(true),
             instXsMetadata(nullptr),
             prefetchSource(pfSource) ,
-            prefetchDepth(0) {}
+            prefetchDepth(0),
+            validPrefetchVaddr(false),
+            prefetchVaddr(0),
+            prefetchContextId(InvalidContextID) {}
 
         XsMetadata(PrefetchSourceType pfSource,int pfDepth) :
             validXsMetadata(true),
             instXsMetadata(nullptr),
             prefetchSource(pfSource) ,
-            prefetchDepth(pfDepth) {}
+            prefetchDepth(pfDepth),
+            validPrefetchVaddr(false),
+            prefetchVaddr(0),
+            prefetchContextId(InvalidContextID) {}
 
         void invalidate() {
             validXsMetadata = false;
             instXsMetadata = nullptr;
             prefetchSource = PF_NONE;
+            validPrefetchVaddr = false;
+            prefetchVaddr = 0;
+            prefetchContextId = InvalidContextID;
         }
     } XsMetadata;
 

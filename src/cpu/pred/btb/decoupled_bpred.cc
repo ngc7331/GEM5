@@ -372,8 +372,59 @@ void
 DecoupledBPUWithBTB::accountUpstreamUdpEvents()
 {
     auto events = upstreamUdp->drainEvents();
+    dbpBtbStats.upstreamUdpPenaltyZero += events.penaltyZero;
+    dbpBtbStats.upstreamUdpPenaltyOne += events.penaltyOne;
+    dbpBtbStats.upstreamUdpPenaltyTwoOrMore += events.penaltyTwoOrMore;
+    dbpBtbStats.upstreamUdpOnPathCandidates += events.onPathCandidates;
+    dbpBtbStats.upstreamUdpOffPathCandidates += events.offPathCandidates;
+    dbpBtbStats.upstreamUdpUniqueOffPathCandidates +=
+        events.uniqueOffPathCandidates;
+    dbpBtbStats.upstreamUdpRepeatedOffPathCandidates +=
+        events.repeatedOffPathCandidates;
+    dbpBtbStats.upstreamUdpUsefulSetHits += events.usefulSetHits;
+    dbpBtbStats.upstreamUdpUsefulSetFalsePositiveProxy +=
+        events.usefulSetFalsePositiveProxy;
+    dbpBtbStats.upstreamUdpBloomOneQueries += events.bloomOneQueries;
+    dbpBtbStats.upstreamUdpBloomTwoQueries += events.bloomTwoQueries;
+    dbpBtbStats.upstreamUdpBloomFourQueries += events.bloomFourQueries;
+    dbpBtbStats.upstreamUdpBloomOneHits += events.bloomOneHits;
+    dbpBtbStats.upstreamUdpBloomTwoHits += events.bloomTwoHits;
+    dbpBtbStats.upstreamUdpBloomFourHits += events.bloomFourHits;
+    dbpBtbStats.upstreamUdpBloomOneInsertions += events.bloomOneInsertions;
+    dbpBtbStats.upstreamUdpBloomTwoInsertions += events.bloomTwoInsertions;
+    dbpBtbStats.upstreamUdpBloomFourInsertions +=
+        events.bloomFourInsertions;
+    dbpBtbStats.upstreamUdpBloomOneClears += events.bloomOneClears;
+    dbpBtbStats.upstreamUdpBloomTwoClears += events.bloomTwoClears;
+    dbpBtbStats.upstreamUdpBloomFourClears += events.bloomFourClears;
+    dbpBtbStats.upstreamUdpSeniorityAdds += events.seniorityAdds;
+    dbpBtbStats.upstreamUdpSeniorityDuplicateAdds +=
+        events.seniorityDuplicateAdds;
+    dbpBtbStats.upstreamUdpSeniorityExpired += events.seniorityExpired;
+    dbpBtbStats.upstreamUdpIssuedPrefetches += events.issuedPrefetches;
     dbpBtbStats.upstreamUdpAgedUnuseful += events.agedUnuseful;
+    dbpBtbStats.upstreamUdpEvictionUseful += events.evictionUseful;
+    dbpBtbStats.upstreamUdpEvictionUnuseful += events.evictionUnuseful;
+    dbpBtbStats.upstreamUdpTakenBtbMisses += events.takenBtbMisses;
+    dbpBtbStats.upstreamUdpTakenBtbMissAlreadyOffPath +=
+        events.takenBtbMissAlreadyOffPath;
+    dbpBtbStats.upstreamUdpTakenBtbMissNewOffPath +=
+        events.takenBtbMissNewOffPath;
+    dbpBtbStats.upstreamUdpTakenBtbMissExposedCandidates +=
+        events.takenBtbMissExposedCandidates;
     dbpBtbStats.upstreamUdpBloomClears += events.bloomClears;
+}
+
+void
+DecoupledBPUWithBTB::notifyIcachePrefetchEviction(
+    Addr prefetchVaddr, ThreadID tid, bool unused)
+{
+    if (!enableUpstreamUdp) {
+        return;
+    }
+    upstreamUdp->notifyEviction(
+        prefetchVaddr, tid, unused, upstreamUdpCycle());
+    accountUpstreamUdpEvents();
 }
 
 bool
@@ -443,15 +494,14 @@ DecoupledBPUWithBTB::getPrefetchAddr(Addr &prefetchAddr, PrefetchFailReason &fai
         } else {
             if (enableUpstreamUdp) {
                 const auto decision = upstreamUdp->decide(aligned, tid);
+                accountUpstreamUdpEvents();
                 if (decision == UpstreamUDP::Decision::Filtered) {
                     upstreamUdp->recordFilteredCandidate(
                         aligned, tid, upstreamUdpCycle());
+                    accountUpstreamUdpEvents();
                     prefetchID[tid]++;
                     failReason = PrefetchFailReason::UPSTREAM_UDP_FILTERED;
                     return false;
-                }
-                if (decision == UpstreamUDP::Decision::UsefulSetHit) {
-                    ++dbpBtbStats.upstreamUdpUsefulSetHits;
                 }
             }
             prefetchAddr = aligned;
@@ -469,6 +519,7 @@ DecoupledBPUWithBTB::updatePrefetch(Addr prefetchAddr, ThreadID tid)
     if (enableUpstreamUdp) {
         upstreamUdp->recordIssuedPrefetch(
             prefetchAddr, tid, upstreamUdpCycle());
+        accountUpstreamUdpEvents();
     }
     prefetchID[tid]++;
     lastPrefetchAddr[tid] = prefetchAddr;
@@ -715,6 +766,7 @@ DecoupledBPUWithBTB::processNewPrediction(ThreadID tid)
         if (upstreamUdp->addConfidencePenalty(tid, penalty)) {
             ++dbpBtbStats.upstreamUdpOffPathEntries;
         }
+        accountUpstreamUdpEvents();
     }
 }
 
@@ -750,9 +802,6 @@ DecoupledBPUWithBTB::handleSquash(ThreadID tid, unsigned target_id,
     fsqFlushFlag[tid] = true;
     // Set squashing state
     threads[tid].squashing = true;
-    if (enableUpstreamUdp && upstreamUdp->resetPathConfidence(tid)) {
-        ++dbpBtbStats.upstreamUdpPathResets;
-    }
 
     // Find the target being squashed
     if (!ftq.hasTarget(target_id, tid)) {
@@ -764,11 +813,30 @@ DecoupledBPUWithBTB::handleSquash(ThreadID tid, unsigned target_id,
         clearPreds(tid);
         threads[tid].validprediction = false;
         threads[tid].s0PC = redirect_pc;
+        if (enableUpstreamUdp && upstreamUdp->resetPathConfidence(tid)) {
+            ++dbpBtbStats.upstreamUdpPathResets;
+        }
         return;
     }
 
     // Get reference to the target
     auto &target = ftq.get(target_id, tid);
+
+    if (enableUpstreamUdp && squash_type == SQUASH_CTRL &&
+        actually_taken) {
+        const bool branch_was_in_btb = std::any_of(
+            target.predBTBEntries.begin(), target.predBTBEntries.end(),
+            [&squash_pc](const BTBEntry &entry) {
+                return entry.valid && entry.pc == squash_pc.instAddr();
+            });
+        if (!branch_was_in_btb) {
+            upstreamUdp->signalTakenBtbMiss(tid);
+            accountUpstreamUdpEvents();
+        }
+    }
+    if (enableUpstreamUdp && upstreamUdp->resetPathConfidence(tid)) {
+        ++dbpBtbStats.upstreamUdpPathResets;
+    }
 
     // Update target state
     target.resolved = true;

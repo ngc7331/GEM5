@@ -337,14 +337,57 @@ class DecoupledBPUWithBTB : public BPredUnit
 
         statistics::Scalar upstreamUdpOffPathEntries;
         statistics::Scalar upstreamUdpPathResets;
+        statistics::Scalar upstreamUdpPenaltyZero;
+        statistics::Scalar upstreamUdpPenaltyOne;
+        statistics::Scalar upstreamUdpPenaltyTwoOrMore;
+        statistics::Scalar upstreamUdpOnPathCandidates;
+        statistics::Scalar upstreamUdpOffPathCandidates;
+        statistics::Scalar upstreamUdpUniqueOffPathCandidates;
+        statistics::Scalar upstreamUdpRepeatedOffPathCandidates;
         statistics::Scalar upstreamUdpUsefulSetHits;
+        statistics::Scalar upstreamUdpUsefulSetFalsePositiveProxy;
+        statistics::Scalar upstreamUdpBloomOneQueries;
+        statistics::Scalar upstreamUdpBloomTwoQueries;
+        statistics::Scalar upstreamUdpBloomFourQueries;
+        statistics::Scalar upstreamUdpBloomOneHits;
+        statistics::Scalar upstreamUdpBloomTwoHits;
+        statistics::Scalar upstreamUdpBloomFourHits;
+        statistics::Scalar upstreamUdpBloomOneInsertions;
+        statistics::Scalar upstreamUdpBloomTwoInsertions;
+        statistics::Scalar upstreamUdpBloomFourInsertions;
+        statistics::Scalar upstreamUdpBloomOneClears;
+        statistics::Scalar upstreamUdpBloomTwoClears;
+        statistics::Scalar upstreamUdpBloomFourClears;
         statistics::Scalar upstreamUdpSeniorityHits;
         statistics::Scalar upstreamUdpSeniorityMisses;
+        statistics::Scalar upstreamUdpSeniorityAdds;
+        statistics::Scalar upstreamUdpSeniorityDuplicateAdds;
+        statistics::Scalar upstreamUdpSeniorityExpired;
         statistics::Scalar upstreamUdpUsefulSetTrains;
+        statistics::Scalar upstreamUdpIssuedPrefetches;
         statistics::Scalar upstreamUdpAgedUnuseful;
+        statistics::Scalar upstreamUdpEvictionUseful;
+        statistics::Scalar upstreamUdpEvictionUnuseful;
+        statistics::Scalar upstreamUdpTakenBtbMisses;
+        statistics::Scalar upstreamUdpTakenBtbMissAlreadyOffPath;
+        statistics::Scalar upstreamUdpTakenBtbMissNewOffPath;
+        statistics::Scalar upstreamUdpTakenBtbMissExposedCandidates;
         statistics::Scalar upstreamUdpBloomClears;
 
-        DBPBTBStats(statistics::Group* parent, unsigned numStages, unsigned fsqSize, unsigned maxInstsNum);
+        statistics::Value upstreamUdpBloomOneCurrentInsertions;
+        statistics::Value upstreamUdpBloomTwoCurrentInsertions;
+        statistics::Value upstreamUdpBloomFourCurrentInsertions;
+        statistics::Value upstreamUdpBloomOneCurrentBitsSet;
+        statistics::Value upstreamUdpBloomTwoCurrentBitsSet;
+        statistics::Value upstreamUdpBloomFourCurrentBitsSet;
+        statistics::Value upstreamUdpBloomOneCurrentExactEntries;
+        statistics::Value upstreamUdpBloomTwoCurrentExactEntries;
+        statistics::Value upstreamUdpBloomFourCurrentExactEntries;
+        statistics::Value upstreamUdpCurrentSeniorityEntries;
+        statistics::Value upstreamUdpCurrentOutstandingPrefetches;
+
+        DBPBTBStats(DecoupledBPUWithBTB* parent, unsigned numStages,
+                    unsigned fsqSize, unsigned maxInstsNum);
     } dbpBtbStats;
 
   public:
@@ -447,6 +490,8 @@ class DecoupledBPUWithBTB : public BPredUnit
     bool prefetchFilteredByUDP(ThreadID tid) const;
     uint64_t upstreamUdpCycle() const;
     void accountUpstreamUdpEvents();
+    void notifyIcachePrefetchEviction(Addr prefetchVaddr, ThreadID tid,
+                                      bool unused);
 
     enum PrefetchFailReason
     {
