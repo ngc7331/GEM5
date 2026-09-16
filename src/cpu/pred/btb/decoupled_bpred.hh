@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <deque>
 #include <memory>
+#include <optional>
 #include <queue>
 #include <stack>
 #include <utility>
@@ -531,7 +532,8 @@ class DecoupledBPUWithBTB : public BPredUnit
                         const boost::dynamic_bitset<> &phistory,
                         ThreadID tid);
 
-    Addr getPreservedReturnAddr(const DynInstPtr &dynInst);
+    // No preserved return prediction is available when RAS is disabled.
+    std::optional<Addr> getPreservedReturnAddr(const DynInstPtr &dynInst);
 
     std::unordered_map<Addr, int> takenBranches;      // branch address -> taken count
     std::unordered_map<Addr, int> currentPhaseTakenBranches;

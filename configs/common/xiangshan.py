@@ -909,6 +909,12 @@ def xiangshan_system_init():
     Options.addXiangshanFSOptions(parser)
     Options.addXiangshanTraceOptions(parser)
     parser.add_argument(
+        "--bp-profile",
+        choices=("default", "weaker-bp", "even-weaker-bp"),
+        default="default",
+        help="kmhv3 BPU profile: default, uBTB/MBTB/TAGE only, or reduced-capacity uBTB/MBTB/TAGE",
+    )
+    parser.add_argument(
         "--btb-tage-upper-bound",
         action="store_true",
         default=False,
@@ -1072,6 +1078,14 @@ def xiangshan_system_init():
     if '--ruby' in sys.argv:
         Ruby.define_options(parser)
     args = parser.parse_args()
+
+    if args.bp_profile != "default" and (
+        args.btb_tage_upper_bound or args.standalone_sc
+    ):
+        parser.error(
+            "--bp-profile weaker-bp/even-weaker-bp cannot be combined with "
+            "--btb-tage-upper-bound or --standalone-sc"
+        )
 
     if args.enable_udp and args.enable_upstream_udp:
         parser.error("--enable-udp and --enable-upstream-udp are mutually exclusive")

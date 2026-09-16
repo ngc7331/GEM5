@@ -1267,7 +1267,7 @@ Fetch::flushFetchBuffer()
     }
 }
 
-Addr
+std::optional<Addr>
 Fetch::getPreservedReturnAddr(const DynInstPtr &dynInst)
 {
     assert(dbpbtb);

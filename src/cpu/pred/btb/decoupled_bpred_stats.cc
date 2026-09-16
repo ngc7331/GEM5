@@ -1015,15 +1015,15 @@ DecoupledBPUWithBTB::commitPredWrongSource(const FetchTarget &entry)
     bool onlyDirectionWrong = entry.exeTaken != entry.predTaken;
 
     assert(s1PredSource < mbtbid);
-    if (s1PredSource == ubtbid) {
+    if (ubtb->isEnabled() && s1PredSource == ubtbid) {
         dbpBtbStats.s1PredWrongUbtb++;
-    } else if (s1PredSource == abtbid) {
+    } else if (abtb->isEnabled() && s1PredSource == abtbid) {
         dbpBtbStats.s1PredWrongAbtb++;
     }else {
         dbpBtbStats.s1PredWrongFallthrough++;
     }
 
-    if (s3PredSource == rasid) {
+    if (ras->isEnabled() && s3PredSource == rasid) {
         if (exeBranchInfo.isCond) {
             dbpBtbStats.s3PredWrongTage++;
         } else if (exeBranchInfo.isReturn) {
@@ -1031,7 +1031,7 @@ DecoupledBPUWithBTB::commitPredWrongSource(const FetchTarget &entry)
         } else {
             dbpBtbStats.s3PredWrongMbtb++;
         }
-    } else if (s3PredSource == ittageid) {
+    } else if (ittage->isEnabled() && s3PredSource == ittageid) {
         if (exeBranchInfo.isIndirect) {
             dbpBtbStats.s3PredWrongIttage++;
         } else if (exeBranchInfo.isCond) {
@@ -1056,7 +1056,7 @@ DecoupledBPUWithBTB::commitPredWrongSource(const FetchTarget &entry)
             } else {
                 dbpBtbStats.s3PredWrongMbtb++;
             }
-        } else if (exeBranchInfo.isIndirect) {
+        } else if (exeBranchInfo.isIndirect && ittage->isEnabled()) {
             dbpBtbStats.s3PredWrongIttage++;
         } else {
             dbpBtbStats.s3PredWrongMbtb++;
