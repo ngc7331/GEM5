@@ -521,9 +521,10 @@ DecoupledBPUWithBTB::generateFinalPredAndCreateBubbles(ThreadID tid)
     if (found_s3_taken) {
         auto pred_taken_entry = finalPred.getTakenEntry();
         if (pred_taken_entry.valid) {
-            if (pred_taken_entry.isReturn) {
+            if (pred_taken_entry.isReturn && ras->isEnabled()) {
                 finalPred.s3Source = ras->getComponentIdx();
-            } else if (pred_taken_entry.isIndirect && ittage->tageHit()) {
+            } else if (pred_taken_entry.isIndirect &&
+                       ittage->isEnabled() && ittage->tageHit()) {
                 finalPred.s3Source = ittage->getComponentIdx();
             }else if (pred_taken_entry.isCond) {
                 finalPred.s3Source = tage->getComponentIdx();
@@ -777,7 +778,8 @@ DecoupledBPUWithBTB::controlSquash(unsigned target_id,
     auto &target = ftq.get(target_id, tid);
     // Get target address
     Addr real_target = corr_target.instAddr();
-    if (!fromCommit && static_inst->isReturn() && !static_inst->isNonSpeculative()) {
+    if (!fromCommit && static_inst->isReturn() &&
+        !static_inst->isNonSpeculative() && ras->isEnabled()) {
         // get ret addr from ras meta
         real_target = ras->getTopAddrFromMetas(target);
         // TODO: set real target to dynamic inst
@@ -1121,9 +1123,13 @@ DecoupledBPUWithBTB::resetPC(ThreadID tid, Addr new_pc)
     threads[tid].s0PC = new_pc;
 }
 
-Addr
+std::optional<Addr>
 DecoupledBPUWithBTB::getPreservedReturnAddr(const DynInstPtr &dynInst)
 {
+    // Disabled components have no prediction metadata in the FTQ.
+    if (!ras->isEnabled()) {
+        return std::nullopt;
+    }
     DPRINTF(DecoupleBP, "acquiring reutrn address for inst pc %#lx from decode\n", dynInst->pcState().instAddr());
     auto ftqid = dynInst->getFtqId();
     auto retAddr = ras->getTopAddrFromMetas(ftq.get(ftqid, dynInst->threadNumber));

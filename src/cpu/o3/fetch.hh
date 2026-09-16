@@ -44,6 +44,7 @@
 #include <cstring>
 #include <deque>
 #include <memory>
+#include <optional>
 #include <utility>
 
 #include "arch/generic/decoder.hh"
@@ -518,7 +519,7 @@ class Fetch
 
     void flushFetchBuffer();
 
-    Addr getPreservedReturnAddr(const DynInstPtr &dynInst);
+    std::optional<Addr> getPreservedReturnAddr(const DynInstPtr &dynInst);
 
     /** Trace-driven simulation metadata accessors (used by CPU/Commit). */
     const o3::TraceInstruction* getTraceInstMetadata(InstSeqNum seqNum) const;
