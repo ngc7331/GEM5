@@ -132,6 +132,25 @@ def setKmhV3Params(args, system):
                 cpu.branchPred.mgsc.forceUseSC = True
                 cpu.branchPred.mgsc.allowMissingTageInfo = True
 
+            # Apply the selected profile after the normal kmhv3 BPU settings.
+            bp_profile = getattr(args, 'bp_profile', 'default')
+            if bp_profile != 'default':
+                for name in ('ubtb', 'abtb', 'microtage', 'mbtb', 'tage',
+                             'ittage', 'mgsc', 'ras'):
+                    getattr(cpu.branchPred, name).enabled = name in (
+                        'ubtb', 'mbtb', 'tage')
+
+                if bp_profile == 'even-weaker-bp':
+                    cpu.branchPred.ubtb.numEntries = 16
+                    cpu.branchPred.mbtb.numEntries = 4096
+                    cpu.branchPred.tage.numPredictors = 4
+                    cpu.branchPred.tage.tableSizes = [1024] * 4
+                    cpu.branchPred.tage.numWays = [2] * 4
+                    cpu.branchPred.tage.TTagBitSizes = [13] * 4
+                    cpu.branchPred.tage.TTagPcShifts = [1] * 4
+                    # Keep original tables 0/2/4/6; the 397-bit history is lost.
+                    cpu.branchPred.tage.histLengths = [4, 17, 56, 211]
+
         # l1 cache per core
         if args.caches:
             cpu.icache.size = '64kB'

@@ -792,23 +792,23 @@ Decode::decodeInsts(ThreadID tid)
                 break;
             }
         }
-        // unpredicted return can make use of ras results to get earlier resteer
+        // Unpredicted returns can use RAS results for an earlier redirect.
         if (inst->isReturn() && !inst->isNonSpeculative() && !inst->readPredTaken()) {
-            ++stats.branchMispred;
-            decode_stalls.push(StallReason::InstMisPred);
-            breakDecode = StallReason::InstMisPred;
-            // return target cannot be computed in decode stage since it is an indirect branch
-            // need to inquire bpu to get the target
-            auto return_addr = fetch_ptr->getPreservedReturnAddr(inst);
-            auto target = std::make_unique<RiscvISA::PCState>(return_addr);
-            DPRINTF(Decode, "[tid:%i] [sn:%llu] Updating predictions:"
-                    " Return not identified by bp: predTaken %d, PredPC: %s Now PC %s\n",
-                    tid, inst->seqNum, inst->readPredTaken(), inst->readPredTarg(), *target);
-            inst->setPredTaken(true);
-            inst->setPredTarg(*target);
-            // must squash after setting inst real target because it cannot be computed from static inst
-            selfSquash(inst, inst->threadNumber);
-            break;
+            // Without RAS, the indirect return target is resolved at execute.
+            if (auto return_addr = fetch_ptr->getPreservedReturnAddr(inst)) {
+                ++stats.branchMispred;
+                decode_stalls.push(StallReason::InstMisPred);
+                breakDecode = StallReason::InstMisPred;
+                auto target = std::make_unique<RiscvISA::PCState>(*return_addr);
+                DPRINTF(Decode, "[tid:%i] [sn:%llu] Updating predictions:"
+                        " Return not identified by bp: predTaken %d, PredPC: %s Now PC %s\n",
+                        tid, inst->seqNum, inst->readPredTaken(), inst->readPredTarg(), *target);
+                inst->setPredTaken(true);
+                inst->setPredTarg(*target);
+                // Set the target before squash: static inst cannot compute it.
+                selfSquash(inst, inst->threadNumber);
+                break;
+            }
         }
         if (inst->isNonSpeculative() && inst->readPredTaken()) {
             // TODO: redirect to fall thru
