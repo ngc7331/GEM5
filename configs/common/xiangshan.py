@@ -21,6 +21,7 @@ from common import ObjectList
 from common.Caches import *
 from common import Options
 from common.FUScheduler import *
+from common.PdipPaperAlign import validate_paper_align
 from m5.objects import PerfRecord
 
 
@@ -622,12 +623,18 @@ def _finish_xiangshan_system(args, test_sys, TestCPUClass, ruby):
             test_sys.cpu[i].createThreads()
             print("Create threads for test sys cpu ({})".format(type(test_sys.cpu[i])))
 
-        for opt in ['caches', 'l2cache', 'l1_to_l2_pf_hint']:
+        cache_options = ['caches', 'l2cache']
+        if not getattr(args, 'paper_align', False):
+            cache_options.append('l1_to_l2_pf_hint')
+        for opt in cache_options:
             if hasattr(args, opt) and not getattr(args, opt):
                 setattr(args, opt, True)
 
         if not args.no_l3cache:
-            for opt in ['l3cache', 'l2_to_l3_pf_hint']:
+            l3_options = ['l3cache']
+            if not getattr(args, 'paper_align', False):
+                l3_options.append('l2_to_l3_pf_hint')
+            for opt in l3_options:
                 if hasattr(args, opt) and not getattr(args, opt):
                     setattr(args, opt, True)
 
@@ -884,6 +891,10 @@ def xiangshan_system_init():
     Options.addXiangshanFSOptions(parser)
     Options.addXiangshanTraceOptions(parser)
     parser.add_argument(
+        "--paper-align", action="store_true",
+        help="Map PDIP paper hardware for FDIP alone or --enable-upstream-pdip",
+    )
+    parser.add_argument(
         "--bp-profile",
         choices=("default", "weaker-bp", "even-weaker-bp"),
         default="default",
@@ -1010,6 +1021,7 @@ def xiangshan_system_init():
     if '--ruby' in sys.argv:
         Ruby.define_options(parser)
     args = parser.parse_args()
+    validate_paper_align(args, parser)
 
     if args.bp_profile != "default" and (
         args.btb_tage_upper_bound or args.standalone_sc

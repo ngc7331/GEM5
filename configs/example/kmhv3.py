@@ -12,6 +12,7 @@ addToPath('../')
 
 from ruby import Ruby
 from common.LSQBankConflict import set_lsq_bank_conflict_cache_params
+from common.PdipPaperAlign import configure_paper_align_args, apply_paper_align
 
 from common.FSConfig import *
 from common.SysPaths import *
@@ -220,6 +221,7 @@ if __name__ == '__m5_main__':
 
     # NOTE: Non-portable options for fdip experiments
     args.l1i_hwp_type = 'FDIPPrefetcher'
+    configure_paper_align_args(args)
 
     # Match the memories with the CPUs, based on the options for the test system
     TestMemClass = Simulation.setMemClass(args)
@@ -229,6 +231,7 @@ if __name__ == '__m5_main__':
         configure_xiangshan_linux_workload(test_sys, args)
     # Set ideal parameters here with the highest priority, over command-line arguments
     setKmhV3Params(args, test_sys)
+    apply_paper_align(args, test_sys)
 
     root = Root(full_system=True, system=test_sys)
 
