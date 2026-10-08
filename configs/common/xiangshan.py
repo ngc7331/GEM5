@@ -909,6 +909,12 @@ def xiangshan_system_init():
     Options.addXiangshanFSOptions(parser)
     Options.addXiangshanTraceOptions(parser)
     parser.add_argument(
+        "--paper-align",
+        action="store_true",
+        default=False,
+        help="Align FDIP or upstream UDP resources to ISCA 2024 Table II (best-effort model mapping)",
+    )
+    parser.add_argument(
         "--bp-profile",
         choices=("default", "weaker-bp", "even-weaker-bp"),
         default="default",
@@ -1078,6 +1084,14 @@ def xiangshan_system_init():
     if '--ruby' in sys.argv:
         Ruby.define_options(parser)
     args = parser.parse_args()
+    args._upstream_udp_off_path_threshold_explicit = any(
+        option == "--upstream-udp-off-path-threshold" or
+        option.startswith("--upstream-udp-off-path-threshold=")
+        for option in sys.argv[1:]
+    )
+
+    from common.UpstreamUdpPaperAlign import validate_paper_align
+    validate_paper_align(args, parser)
 
     if args.bp_profile != "default" and (
         args.btb_tage_upper_bound or args.standalone_sc

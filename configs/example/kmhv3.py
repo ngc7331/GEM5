@@ -19,6 +19,7 @@ from common.Benchmarks import *
 from common import Simulation
 from common.Caches import *
 from common.xiangshan import *
+from common.UpstreamUdpPaperAlign import prepare_paper_align, apply_paper_align
 
 def setPtwLevelLimitParams(args, tlb):
     tlb.walker.enable_ptw_level_limit = args.enable_ptw_level_limit
@@ -153,8 +154,8 @@ def setKmhV3Params(args, system):
 
         # l1 cache per core
         if args.caches:
-            cpu.icache.size = '64kB'
-            cpu.dcache.size = '64kB'
+            cpu.icache.size = '32KiB' if args.paper_align else '64kB'
+            cpu.dcache.size = '48KiB' if args.paper_align else '64kB'
             cpu.dcache.tag_load_read_ports = 3
             cpu.dcache.mshrs = 16
             cpu.dcache.do_fast_writeline = False
@@ -221,6 +222,8 @@ if __name__ == '__m5_main__':
     # NOTE: Non-portable options for fdip experiments
     args.l1i_hwp_type = 'FDIPPrefetcher'
 
+    prepare_paper_align(args)
+
     # Match the memories with the CPUs, based on the options for the test system
     TestMemClass = Simulation.setMemClass(args)
 
@@ -229,6 +232,7 @@ if __name__ == '__m5_main__':
         configure_xiangshan_linux_workload(test_sys, args)
     # Set ideal parameters here with the highest priority, over command-line arguments
     setKmhV3Params(args, test_sys)
+    apply_paper_align(args, test_sys)
 
     root = Root(full_system=True, system=test_sys)
 
