@@ -115,6 +115,7 @@ class UpstreamUDP
     bool isOffPath(ThreadID tid) const;
 
     Decision decide(Addr blockAddr, ThreadID tid);
+    Decision decide(Addr blockAddr, ThreadID tid, bool candidateOffPath);
     void recordFilteredCandidate(Addr blockAddr, ThreadID tid,
                                  uint64_t cycle);
     void recordIssuedPrefetch(Addr blockAddr, ThreadID tid,

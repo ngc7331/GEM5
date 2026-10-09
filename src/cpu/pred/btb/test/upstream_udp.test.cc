@@ -43,6 +43,45 @@ TEST(UpstreamUDPTest, ConfidenceThresholdAndRecovery)
     EXPECT_FALSE(udp.resetPathConfidence(0));
 }
 
+TEST(UpstreamUDPTest, CandidateLabelSurvivesTailConfidenceChanges)
+{
+    UpstreamUDP udp(config(3));
+    const bool earlier_candidate = udp.isOffPath(0);
+    ASSERT_TRUE(udp.addConfidencePenalty(0, 3));
+
+    // A retry of an earlier block must not inherit later branch uncertainty.
+    EXPECT_EQ(udp.decide(0x1000, 0, earlier_candidate),
+              UpstreamUDP::Decision::OnPath);
+    EXPECT_EQ(udp.decide(0x1000, 0, earlier_candidate),
+              UpstreamUDP::Decision::OnPath);
+    const bool later_candidate = udp.isOffPath(0);
+    EXPECT_EQ(udp.decide(0x2000, 0, later_candidate),
+              UpstreamUDP::Decision::Filtered);
+
+    ASSERT_TRUE(udp.resetPathConfidence(0));
+    EXPECT_EQ(udp.decide(0x2000, 0, later_candidate),
+              UpstreamUDP::Decision::Filtered);
+    EXPECT_EQ(udp.decide(0x3000, 0), UpstreamUDP::Decision::OnPath);
+    const auto events = udp.drainEvents();
+    EXPECT_EQ(events.onPathCandidates, 3);
+    EXPECT_EQ(events.offPathCandidates, 2);
+}
+
+TEST(UpstreamUDPTest, CandidateLabelDoesNotFreezeUsefulSet)
+{
+    UpstreamUDP udp(config(1));
+    ASSERT_TRUE(udp.addConfidencePenalty(0, 1));
+    const bool candidate = udp.isOffPath(0);
+    EXPECT_EQ(udp.decide(0x1000, 0, candidate),
+              UpstreamUDP::Decision::Filtered);
+    udp.recordFilteredCandidate(0x1000, 0, 1);
+    EXPECT_TRUE(udp.notifyCommit(0x1000, 0, 2).trained);
+    udp.recordFilteredCandidate(0x2000, 0, 3);
+    EXPECT_TRUE(udp.notifyCommit(0x2000, 0, 4).trained);
+    EXPECT_EQ(udp.decide(0x1000, 0, candidate),
+              UpstreamUDP::Decision::UsefulSetHit);
+}
+
 TEST(UpstreamUDPTest, CommitTrainsFilteredCandidate)
 {
     UpstreamUDP udp(config(1));

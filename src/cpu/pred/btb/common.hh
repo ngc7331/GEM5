@@ -349,6 +349,9 @@ struct FetchTarget
     uint8_t asidHash;
     Addr startPC;       // start pc of the stream
     bool predTaken;     // whether the FetchTarget has taken branch
+    // Confidence of the path reaching startPC, before this block's branches.
+    // Keep the label with the candidate while the BPU predicts further ahead.
+    bool upstreamUdpOffPath{false};
     Addr predEndPC;     // predicted stream end pc (fall through pc)
     BranchInfo predBranchInfo; // predicted branch info
 

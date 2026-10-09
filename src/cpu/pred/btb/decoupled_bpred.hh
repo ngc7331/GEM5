@@ -343,6 +343,8 @@ class DecoupledBPUWithBTB : public BPredUnit
         statistics::Scalar upstreamUdpPenaltyTwoOrMore;
         statistics::Scalar upstreamUdpOnPathCandidates;
         statistics::Scalar upstreamUdpOffPathCandidates;
+        statistics::Scalar upstreamUdpCandidateOnTailOff;
+        statistics::Scalar upstreamUdpCandidateOffTailOn;
         statistics::Scalar upstreamUdpUniqueOffPathCandidates;
         statistics::Scalar upstreamUdpRepeatedOffPathCandidates;
         statistics::Scalar upstreamUdpUsefulSetHits;

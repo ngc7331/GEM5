@@ -192,8 +192,14 @@ UpstreamUDP::lookupUsefulSet(uint64_t line)
 UpstreamUDP::Decision
 UpstreamUDP::decide(Addr blockAddr, ThreadID tid)
 {
+    return decide(blockAddr, tid, isOffPath(tid));
+}
+
+UpstreamUDP::Decision
+UpstreamUDP::decide(Addr blockAddr, ThreadID tid, bool candidateOffPath)
+{
     checkThread(tid);
-    if (!isOffPath(tid)) {
+    if (!candidateOffPath) {
         ++pendingEvents.onPathCandidates;
         ++episodeOnPathCandidates[tid];
         return Decision::OnPath;

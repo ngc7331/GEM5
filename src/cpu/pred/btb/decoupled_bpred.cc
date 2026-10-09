@@ -493,7 +493,14 @@ DecoupledBPUWithBTB::getPrefetchAddr(Addr &prefetchAddr, PrefetchFailReason &fai
             prefetchID[tid]++;
         } else {
             if (enableUpstreamUdp) {
-                const auto decision = upstreamUdp->decide(aligned, tid);
+                const bool tail_off_path = upstreamUdp->isOffPath(tid);
+                if (!target.upstreamUdpOffPath && tail_off_path) {
+                    ++dbpBtbStats.upstreamUdpCandidateOnTailOff;
+                } else if (target.upstreamUdpOffPath && !tail_off_path) {
+                    ++dbpBtbStats.upstreamUdpCandidateOffTailOn;
+                }
+                const auto decision = upstreamUdp->decide(
+                    aligned, tid, target.upstreamUdpOffPath);
                 accountUpstreamUdpEvents();
                 if (decision == UpstreamUDP::Decision::Filtered) {
                     upstreamUdp->recordFilteredCandidate(
@@ -1159,6 +1166,11 @@ DecoupledBPUWithBTB::createFetchTargetEntry(ThreadID tid)
     entry.tid = tid;
     entry.asidHash = finalPred.asidHash;
     entry.startPC = s0PC;
+    if (enableUpstreamUdp) {
+        // The current block's branches select its successor. Their penalty
+        // must affect later candidates, not this block's own cache line.
+        entry.upstreamUdpOffPath = upstreamUdp->isOffPath(tid);
+    }
 
     // Extract branch prediction information
     bool taken = finalPred.isTaken();
